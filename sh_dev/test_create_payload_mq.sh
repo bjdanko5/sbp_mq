@@ -1,7 +1,7 @@
 #!/bin/bash
 # test_create_payload_mq.sh — Полный тест MQ с автосозданием файлов
 
-BASE_URL="http://localhost:8511"
+BASE_URL="http://localhost:8512"
 BANK="ci"
 BASE="zkh_ursv"
 JOB_ID=999
@@ -16,11 +16,11 @@ echo ""
 echo "📁 Подготовка тестовых файлов..."
 
 # 1. Создаём папку для данных банка
-sudo mkdir -p /sbp/mq/ci/zkh_ursv
-sudo chown -R user:user /sbp/mq/ci
+sudo mkdir -p /sbp/mq_dev/ci/zkh_ursv
+sudo chown -R user:user /sbp/mq_dev/ci
 
 # 2. Создаём файл 7845.json
-cat > /sbp/mq/ci/zkh_ursv/7845.json << 'EOF'
+cat > /sbp/mq_dev/ci/zkh_ursv/7845.json << 'EOF'
 [
   {"requestId": "754316", "amount": 100},
   {"requestId": "754318", "amount": 200}
@@ -28,11 +28,11 @@ cat > /sbp/mq/ci/zkh_ursv/7845.json << 'EOF'
 EOF
 
 # 3. Удаляем старый Job-файл
-rm -f /sbp/mq/jobs/error/ci@zkh_ursv@999.json
-rm -f /sbp/mq/jobs/ci@zkh_ursv@999.json
+rm -f /sbp/mq_dev/jobs/error/ci@zkh_ursv@999.json
+rm -f /sbp/mq_dev/jobs/ci@zkh_ursv@999.json
 
 # 4. Создаём Job-файл
-cat > /sbp/mq/jobs/ci@zkh_ursv@999.json << 'EOF'
+cat > /sbp/mq_dev/jobs/ci@zkh_ursv@999.json << 'EOF'
 {
   "bank": "ci",
   "base": "zkh_ursv",
@@ -52,11 +52,11 @@ cat > /sbp/mq/jobs/ci@zkh_ursv@999.json << 'EOF'
 EOF
 
 # 5. Удаляем блокировку
-redis-cli DEL "lock:job:ci:zkh_ursv:999" > /dev/null 2>&1
+redis-cli -n 1 DEL "lock:job:ci:zkh_ursv:999" > /dev/null 2>&1
 
 # 6. Проверяем файлы
-echo "   ✅ Файл 7845.json: $(ls -la /sbp/mq/ci/zkh_ursv/7845.json | awk '{print $5}') байт"
-echo "   ✅ Job-файл: $(ls -la /sbp/mq/jobs/ci@zkh_ursv@999.json | awk '{print $5}') байт"
+echo "   ✅ Файл 7845.json: $(ls -la /sbp/mq_dev/ci/zkh_ursv/7845.json | awk '{print $5}') байт"
+echo "   ✅ Job-файл: $(ls -la /sbp/mq_dev/jobs/ci@zkh_ursv@999.json | awk '{print $5}') байт"
 echo ""
 
 # ============================================================

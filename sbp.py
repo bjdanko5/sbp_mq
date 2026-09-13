@@ -34,21 +34,9 @@ async def startup_event():
         await request_storage.connect()
         logger.info("✅ MQ Client + RequestStorage подключены")
         
-        if config.DEBUG_VERBOSE:
-            import subprocess
-            
-            # ✅ Перезапускаем все Worker'ы через bash (wildcard работает)
-            result = subprocess.run(
-                ["sudo", "bash", "-c", "systemctl restart sbp_mq-worker*"],
-                capture_output=True,
-                text=True
-            )
-            if result.returncode == 0:
-                logger.info("✅ Все Worker'ы перезапущены")
-            else:
-                logger.error(f"❌ Ошибка перезапуска Worker'ов: {result.stderr}")
-        else:
-            logger.info("ℹ️ Worker управляется через systemd (production)")
+        # ✅ Воркеры управляются через systemd (sbp_mq-worker*.service)
+        # Перезапуск — через run_debug.sh (после правки кода)
+        logger.info("ℹ️  Worker'ы управляются через systemd (sbp_mq-worker*.service)")
         
     except Exception as e:
         logger.error(f"❌ Ошибка при инициализации: {e}")

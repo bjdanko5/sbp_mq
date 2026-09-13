@@ -99,7 +99,7 @@ SBP_MQ_DEBUG_PORT = parse_int_env('SBP_MQ_DEBUG_PORT', 5679)
 DB_FILE = os.path.join(BASE_DIR, "requests.db")
 
 # Корневой путь для всей SBP системы
-SBP_ROOT4MQ = "/sbp/mq"
+SBP_ROOT4MQ = parse_str_env('SBP_ROOT4MQ', '/sbp/mq')
 
 # Путь для Job-файлов
 SBP_ROOT4JOBS = os.path.join(SBP_ROOT4MQ, "jobs")

@@ -1,6 +1,52 @@
 #!/bin/bash
-cd /var/www/html/sbp_mq
-source .venv/bin/activate
+# run_debug.sh — запуск SBP MQ с отладкой
+#
+# Универсальный скрипт: работает и в prod (/var/www/html/sbp_mq),
+# и в dev (/var/www/html/sbp_mq_dev).
+#
+# Определяет режим по имени папки:
+#   - *_dev → dev (порт 8512, Redis DB 1, очередь sbp_mq_dev_queue, воркеры sbp_mq-dev-worker)
+#   - остальное → prod (порт 8511, Redis DB 0, очередь sbp_mq_queue, воркеры sbp_mq-worker)
+
+# ============================================================
+#                   ОПРЕДЕЛЕНИЕ ОКРУЖЕНИЯ
+# ============================================================
+
+PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_NAME="$(basename "$PROJECT_DIR")"
+
+# ✅ Определяем режим по имени папки
+if [[ "$PROJECT_NAME" == *"_dev" ]]; then
+    MODE="DEV"
+    WORKER_PATTERN="sbp_mq-dev-worker"
+else
+    MODE="PROD"
+    WORKER_PATTERN="sbp_mq-worker"
+fi
+
+echo "========================================"
+echo "🔧 SBP MQ — РЕЖИМ: $MODE"
+echo "   Папка:    $PROJECT_DIR"
+echo "   Воркеры:  $WORKER_PATTERN*"
+echo "========================================"
+
+cd "$PROJECT_DIR" || {
+    echo "❌ Не удалось перейти в $PROJECT_DIR"
+    exit 1
+}
+
+# ============================================================
+#                   АКТИВАЦИЯ VENV
+# ============================================================
+
+if [ -f ".venv/bin/activate" ]; then
+    # shellcheck disable=SC1091
+    source .venv/bin/activate
+    echo "✅ venv активирован"
+else
+    echo "❌ .venv/bin/activate не найден!"
+    exit 1
+fi
 
 # ============================================================
 #                   ЗАГРУЗКА .env
@@ -28,6 +74,7 @@ fi
 #                   ОСТАНОВКА СТАРЫХ ПРОЦЕССОВ СЕРВЕРА
 # ============================================================
 
+echo ""
 echo "⏹️  Останавливаем старые процессы сервера..."
 
 pkill -9 -f "uvicorn.*${SBP_MQ_PORT}" 2>/dev/null
@@ -77,22 +124,23 @@ export PYTHONDONTWRITEBYTECODE=1
 # ============================================================
 
 echo "========================================"
-echo "🔧 РЕЖИМЫ ЗАПУСКА:"
+echo "🔧 РЕЖИМЫ ЗАПУСКА ($MODE):"
 echo "   SBP_MQ_PORT:       $SBP_MQ_PORT"
 echo "   SBP_MQ_DEBUG_PORT: $SBP_MQ_DEBUG_PORT"
 echo "   TEST_MODE:         $TEST_MODE"
 echo "   DEBUG_VERBOSE:     $DEBUG_VERBOSE"
+echo "   SBP_ROOT4MQ:       $SBP_ROOT4MQ"
 echo "========================================"
 
 # ============================================================
-#                   ПЕРЕЗАПУСК WORKER'ОВ (ЧЕРЕЗ SYSTEMD)
+#                   ПЕРЕЗАПУСК ВОРКЕРОВ
 # ============================================================
 
 echo ""
-echo "🔄 Перезапуск Worker'ов через systemd..."
+echo "🔄 Перезапуск воркеров ($MODE, паттерн: $WORKER_PATTERN*)..."
 
-# Проверяем, какие Worker-сервисы существуют и активны
-WORKER_SERVICES=$(systemctl list-units --type=service --all 2>/dev/null | grep -E "sbp_mq-worker" | awk '{print $1}')
+# ✅ Ищем воркеры по паттерну для текущего окружения
+WORKER_SERVICES=$(systemctl list-units --type=service --all 2>/dev/null | grep -E "$WORKER_PATTERN" | awk '{print $1}')
 
 if [ -n "$WORKER_SERVICES" ]; then
     for svc in $WORKER_SERVICES; do
@@ -103,9 +151,9 @@ if [ -n "$WORKER_SERVICES" ]; then
             echo "   ⏸️  Пропущен (не активен): $svc"
         fi
     done
-    echo "   ✅ Worker'ы перезапущены"
+    echo "   ✅ Воркеры перезапущены"
 else
-    echo "   ⚠️  Worker-сервисы не найдены"
+    echo "   ⚠️  Воркеры не найдены (паттерн: $WORKER_PATTERN)"
 fi
 
 # ============================================================
@@ -113,7 +161,7 @@ fi
 # ============================================================
 
 echo ""
-echo "🚀 Запуск SBP MQ сервера..."
+echo "🚀 Запуск SBP MQ ($MODE) сервера..."
 echo "   HTTP:  http://localhost:${SBP_MQ_PORT}"
 echo "   Debug: 0.0.0.0:${SBP_MQ_DEBUG_PORT}"
 echo ""
@@ -129,11 +177,11 @@ echo "   Сервер PID: $SERVER_PID"
 
 echo ""
 echo "========================================"
-echo "✅ Всё запущено!"
+echo "✅ $MODE запущен!"
 echo "   Сервер:     http://localhost:${SBP_MQ_PORT}"
 echo "   Debug:      0.0.0.0:${SBP_MQ_DEBUG_PORT}"
 echo "   Мониторинг: http://localhost:${SBP_MQ_PORT}/monitor"
-echo "   Worker'ы:   через systemd (см. логи выше)"
+echo "   Воркеры:    через systemd ($WORKER_PATTERN*)"
 echo "========================================"
 echo ""
 echo "⏳ Сервер работает в фоне. Ctrl+C для выхода."

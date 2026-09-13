@@ -1,0 +1,36 @@
+{
+  "bank": "ci",
+  "base": "zkh_ursv",
+  "job_id": 123,
+  "job_name": "Печать квитанций за сентябрь 2026",
+  "created_at": "2026-09-05T10:00:00",
+  "files": [
+    {
+      "filename": "7845.json",
+      "count": 4,
+      "request_ids": ["754316", "754318", "754319", "754317"]
+    },
+    {
+      "filename": "7846.json",
+      "count": 3,
+      "request_ids": ["754320", "754321", "754322"]
+    },
+    {
+      "filename": "7847.json",
+      "count": 5,
+      "request_ids": ["754323", "754324", "754325", "754326", "754327"]
+    },
+    {
+      "filename": "7848.json",
+      "count": 2,
+      "request_ids": ["754328", "754329"]
+    },
+    {
+      "filename": "7849.json",
+      "count": 6,
+      "request_ids": ["754330", "754331", "754332", "754333", "754334", "754335"]
+    }
+  ],
+  "total_requests": 20,
+  "status": "pending"
+}

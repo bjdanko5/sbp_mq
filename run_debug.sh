@@ -167,7 +167,7 @@ echo "   Debug: 0.0.0.0:${SBP_MQ_DEBUG_PORT}"
 echo ""
 
 python -B -m debugpy --listen 0.0.0.0:${SBP_MQ_DEBUG_PORT} \
-    -m uvicorn sbp:app --reload --host 0.0.0.0 --port ${SBP_MQ_PORT} &
+    -m uvicorn sbp:app  --host 0.0.0.0 --port ${SBP_MQ_PORT} &
 SERVER_PID=$!
 echo "   Сервер PID: $SERVER_PID"
 

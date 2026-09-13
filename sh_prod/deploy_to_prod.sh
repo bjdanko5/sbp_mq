@@ -138,7 +138,7 @@ echo -e "${YELLOW}🔄 Шаг 6: Перезапуск prod...${NC}"
 
 sudo systemctl restart sbp_mq-debug.service
 echo "   Перезапуск API..."
-sleep 10
+sleep 20
 echo -e "${GREEN}   ✅ Prod перезапущен${NC}"
 echo ""
 

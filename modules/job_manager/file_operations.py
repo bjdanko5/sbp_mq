@@ -42,7 +42,8 @@ class FileOperations:
     
     def get_bank_base_path(self, bank: str, base: str) -> Path:
         """Возвращает путь к папке банка/базы."""
-        return Path(config.SBP_ROOT / bank / base)
+        #return Path(str(config.SBP_ROOT / bank / base))
+        return config.SBP_ROOT.bank_pathlib(bank, base)
     
     # ============================================================
     #                     ПРОВЕРКА СУЩЕСТВОВАНИЯ
@@ -129,7 +130,8 @@ class FileOperations:
         base = job_data.get('base')
         job_id = job_data.get('job_id')
         
-        if not all([bank, base, job_id]):
+        #if not all([bank, base, job_id]):
+        if not bank or not base or not job_id:    
             logger.error(f"[{stack}] Недостаточно данных для записи Job: {job_data}")
             return False
         

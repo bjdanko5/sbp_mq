@@ -9,17 +9,19 @@
 import json
 import shutil
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional,TYPE_CHECKING
 
 import config
 from modules.logger_config import logger, get_function_stack
-
+# ✅ Импорт ТОЛЬКО для типизации (не выполняется в runtime)
+if TYPE_CHECKING:
+    from modules.job_manager.manager import JobManager
 
 class FileOperations:
     """Операции с файлами Job."""
     
     def __init__(self, parent):
-        self.parent = parent
+        self.parent: 'JobManager'  = parent
     
     # ============================================================
     #                     ПОЛУЧЕНИЕ ПУТЕЙ

@@ -3,7 +3,10 @@
 Статистика по Job-файлам.
 """
 
-from typing import Dict, Any, List
+from typing import Dict, Any,TYPE_CHECKING 
+# ✅ Импорт ТОЛЬКО для типизации (не выполняется в runtime)
+if TYPE_CHECKING:
+    from modules.job_manager.manager import JobManager
 from pathlib import Path
 
 
@@ -11,7 +14,7 @@ class JobStats:
     """Статистика Job-файлов."""
     
     def __init__(self, parent):
-        self.parent = parent
+        self.parent : 'JobManager' = parent
     
     def get_stats(self) -> Dict[str, Any]:
         """

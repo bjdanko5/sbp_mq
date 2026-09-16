@@ -4,8 +4,10 @@
 """
 
 from datetime import datetime
-from typing import Tuple
-
+from typing import Tuple,TYPE_CHECKING
+# ✅ Импорт ТОЛЬКО для типизации (не выполняется в runtime)
+if TYPE_CHECKING:
+    from modules.job_manager.manager import JobManager
 from modules.logger_config import logger, get_function_stack
 
 
@@ -13,7 +15,7 @@ class JobCleanup:
     """Очистка старых Job-файлов."""
     
     def __init__(self, parent):
-        self.parent = parent
+        self.parent: 'JobManager' = parent
     
     def clean_old_jobs(self, days: int = 30) -> Tuple[int, int]:
         """

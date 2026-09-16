@@ -4,14 +4,16 @@
 """
 
 from pathlib import Path
-from typing import Dict, Any, Optional, List
-
+from typing import Dict, Any, Optional, List,TYPE_CHECKING
+# ✅ Импорт ТОЛЬКО для типизации (не выполняется в runtime)
+if TYPE_CHECKING:
+    from modules.job_manager.manager import JobManager
 
 class JobSearch:
     """Поиск Job-файлов."""
     
     def __init__(self, parent):
-        self.parent = parent
+        self.parent: 'JobManager'  = parent
     
     def find_jobs(self, bank: Optional[str] = None, base: Optional[str] = None) -> List[Path]:
         """
@@ -30,7 +32,7 @@ class JobSearch:
             pattern = f"{bank}@{base}@*.json"
         elif bank:
             pattern = f"{bank}@*@*.json"
-        
+ 
         return list(self.parent.jobs_dir.glob(pattern))
     
     def get_job_info(self, file_path: Path) -> Optional[Dict[str, Any]]:

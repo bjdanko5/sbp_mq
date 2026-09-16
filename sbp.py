@@ -10,6 +10,7 @@ if current_dir not in sys.path:
 
 from fastapi import FastAPI
 
+from modules.logger_config import configure_uvicorn_access_filter
 from modules.mq_client import mq_client
 from modules.request_storage import request_storage
 from modules.worker import worker
@@ -33,7 +34,7 @@ async def startup_event():
         await mq_client.connect()
         await request_storage.connect()
         logger.info("✅ MQ Client + RequestStorage подключены")
-        
+        configure_uvicorn_access_filter(("/monitor/data", "/monitor/cards"))
         # ✅ Воркеры управляются через systemd (sbp_mq-worker*.service)
         # Перезапуск — через run_debug.sh (после правки кода)
         logger.info("ℹ️  Worker'ы управляются через systemd (sbp_mq-worker*.service)")

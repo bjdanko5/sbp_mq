@@ -237,6 +237,36 @@ aggregated_logger = setup_aggregated_logger()
 
 configure_third_party_loggers()
 
+# ============================================================
+#                     ФИЛЬТР ACCESS-ЛОГА UVICORN
+# ============================================================
+
+class EndpointFilter(logging.Filter):
+    """Отбрасывает записи access-лога uvicorn, содержащие указанные пути."""
+    def __init__(self, skip_paths: Tuple[str, ...]):
+        super().__init__()
+        self.skip_paths = skip_paths
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        msg = record.getMessage()
+        return not any(path in msg for path in self.skip_paths)
+
+
+def configure_uvicorn_access_filter(
+    skip_paths: Tuple[str, ...] = ("/monitor/data", "/monitor/cards")
+) -> None:
+    """
+    Убирает шум из access-лога uvicorn для указанных путей.
+
+    Пример:
+        configure_uvicorn_access_filter(("/monitor/data", "/monitor/cards"))
+    """
+    access_logger = logging.getLogger("uvicorn.access")
+    # Убираем ранее добавленные фильтры этого типа, чтобы не дублировать
+    access_logger.filters = [
+        f for f in access_logger.filters if not isinstance(f, EndpointFilter)
+    ]
+    access_logger.addFilter(EndpointFilter(skip_paths))
 
 __all__ = [
     'logger',
@@ -248,5 +278,7 @@ __all__ = [
     'get_function_names',
     'get_function_stack',
     'log_error_with_context',
-    'configure_third_party_loggers'
+    'configure_third_party_loggers',
+    'EndpointFilter',
+    'configure_uvicorn_access_filter',
 ]

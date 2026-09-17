@@ -35,9 +35,12 @@ async def startup_event():
         await request_storage.connect()
         logger.info("✅ MQ Client + RequestStorage подключены")
         configure_uvicorn_access_filter(("/monitor/data", "/monitor/cards"))
-        # ✅ Воркеры управляются через systemd (sbp_mq-worker*.service)
+        # ✅ Параметризованный лог: sbp_mq-worker*.service (PROD) / sbp_mq-dev-worker*.service (DEV)
         # Перезапуск — через run_debug.sh (после правки кода)
-        logger.info("ℹ️  Worker'ы управляются через systemd (sbp_mq-worker*.service)")
+        logger.info(
+            f"ℹ️  Worker'ы управляются через systemd "
+            f"({config.WORKER_PATTERN}*.service)"
+        )
         
     except Exception as e:
         logger.error(f"❌ Ошибка при инициализации: {e}")

@@ -163,14 +163,12 @@ async def _check_redis() -> dict:
 def _check_workers() -> dict:
     """Проверка воркеров (через systemd)."""
     import subprocess
+    import config  # ✅ единый источник
     
-    # Определяем режим по имени папки
-    project_name = os.path.basename(os.path.dirname(os.path.dirname(__file__)))
-    
-    if "_dev" in project_name:
-        pattern = "sbp_mq-dev-worker"
-    else:
-        pattern = "sbp_mq-worker"
+    # ✅ Паттерн воркеров — из config.py
+    # DEV:  sbp_mq-dev-worker
+    # PROD: sbp_mq-worker
+    pattern = config.WORKER_PATTERN
     
     try:
         # Через systemctl list-units

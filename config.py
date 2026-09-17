@@ -88,6 +88,32 @@ def parse_str_env(var_name: str, default: str) -> str:
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
+
+# ============================================================
+#                     ОПРЕДЕЛЕНИЕ ОКРУЖЕНИЯ
+# ============================================================
+# Определяем режим по имени папки:
+#   - sbp_mq_dev → DEV
+#   - sbp_mq     → PROD
+#
+# Используется в:
+#   - sbp.py             (лог о воркерах)
+#   - routes/health.py   (проверка активных воркеров)
+
+PROJECT_NAME = os.path.basename(BASE_DIR)
+IS_DEV = "_dev" in PROJECT_NAME
+IS_PROD = not IS_DEV
+
+# Префикс для systemd-сервисов
+SERVICE_PREFIX = "sbp_mq-dev" if IS_DEV else "sbp_mq"
+
+# Паттерн для воркеров (для grep systemctl)
+WORKER_PATTERN = f"{SERVICE_PREFIX}-worker"
+
+# Полное имя серверного сервиса
+SERVER_SERVICE = f"{SERVICE_PREFIX}.service"
+
+
 # ============================================================
 #                     НАСТРОЙКИ ПОРТА
 # ============================================================

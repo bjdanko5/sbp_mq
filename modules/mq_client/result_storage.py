@@ -9,17 +9,19 @@
 
 import json
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import TYPE_CHECKING, Dict, Any, Optional
 
 import config
 from modules.logger_config import logger
-
+# ✅ Импорт ТОЛЬКО для типизации (не выполняется в runtime)
+if TYPE_CHECKING:
+    from modules.mq_client.base import MQClient
 
 class ResultStorage:
     """Сохранение и получение результатов и прогресса из Redis."""
     
-    def __init__(self, parent):
-        self.parent = parent
+    def __init__(self, parent: 'MQClient'):
+        self.parent: 'MQClient' = parent
     
     # ============================================================
     #                   ПОЛНЫЙ РЕЗУЛЬТАТ
@@ -63,7 +65,7 @@ class ResultStorage:
             
             logger.info(f"✅ [Redis] Результат {task_id} сохранён, статус: {result.get('status')}")
             
-            if file_path:
+            if file_path and self.parent.locker:
                 await self.parent.locker.mark_processed(file_path, result)
                 await self.parent.locker.unlock_file(file_path)
             

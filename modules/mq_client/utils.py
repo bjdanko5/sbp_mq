@@ -5,8 +5,7 @@
 
 import uuid
 from datetime import datetime
-from typing import Optional
-
+from typing import  Optional
 
 def generate_task_id(prefix: str = "task") -> str:
     """

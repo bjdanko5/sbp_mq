@@ -5,17 +5,19 @@
 
 import json
 from pathlib import Path
-from typing import Dict, Any, Union
+from typing import TYPE_CHECKING, Dict, Any, Union
 
 import config
 from modules.logger_config import logger
-
+# ✅ Импорт ТОЛЬКО для типизации (не выполняется в runtime)
+if TYPE_CHECKING:
+    from modules.mq_client.base import MQClient
 
 class Locker:
     """Блокировка файлов через Redis."""
     
-    def __init__(self, parent):
-        self.parent = parent
+    def __init__(self, parent: 'MQClient'):
+        self.parent: 'MQClient' = parent
     
     async def lock_file(self, file_path: Union[str, Path], ttl: int = 3600) -> bool:
         """

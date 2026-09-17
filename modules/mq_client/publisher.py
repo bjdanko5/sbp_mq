@@ -7,19 +7,21 @@ import json
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, Optional, List, Union
+from typing import TYPE_CHECKING, Dict, Any, Optional, List, Union
 
 from aio_pika import Message, DeliveryMode
 
 import config
 from modules.logger_config import logger
-
+# ✅ Импорт ТОЛЬКО для типизации (не выполняется в runtime)
+if TYPE_CHECKING:
+    from modules.mq_client.base import MQClient
 
 class Publisher:
     """Публикация сообщений в очередь RabbitMQ."""
     
-    def __init__(self, parent):
-        self.parent = parent
+    def __init__(self, parent: 'MQClient'):
+        self.parent: 'MQClient' = parent
     
     async def publish_task(
         self,

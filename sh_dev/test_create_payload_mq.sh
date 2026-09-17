@@ -1,38 +1,40 @@
 #!/bin/bash
-# test_create_payload_mq.sh — Полный тест MQ с автосозданием файлов
+# test_create_payload_mq.sh — тест create_payload_mq (dev)
 
-BASE_URL="http://localhost:8512"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+
+source "$PROJECT_DIR/sh_common/load_env.sh" "$PROJECT_DIR" || exit 1
+
+BASE_URL="http://localhost:${SBP_MQ_PORT}"
 BANK="ci"
 BASE="zkh_ursv"
 JOB_ID=999
 
-echo "🧪 ТЕСТ create_payload_mq"
+echo "🧪 ТЕСТ create_payload_mq (порт $SBP_MQ_PORT)"
 echo "=========================="
 echo ""
 
 # ============================================================
-# ПОДГОТОВКА: создаём тестовые файлы
+# ПОДГОТОВКА
 # ============================================================
+
 echo "📁 Подготовка тестовых файлов..."
 
-# 1. Создаём папку для данных банка
 sudo mkdir -p /sbp/mq_dev/ci/zkh_ursv
 sudo chown -R user:user /sbp/mq_dev/ci
 
-# 2. Создаём файл 7845.json
-cat > /sbp/mq_dev/ci/zkh_ursv/7845.json << 'EOF'
+cat > /sbp/mq_dev/ci/zkh_ursv/7845.json << 'JSON_EOF'
 [
   {"requestId": "754316", "amount": 100},
   {"requestId": "754318", "amount": 200}
 ]
-EOF
+JSON_EOF
 
-# 3. Удаляем старый Job-файл
 rm -f /sbp/mq_dev/jobs/error/ci@zkh_ursv@999.json
 rm -f /sbp/mq_dev/jobs/ci@zkh_ursv@999.json
 
-# 4. Создаём Job-файл
-cat > /sbp/mq_dev/jobs/ci@zkh_ursv@999.json << 'EOF'
+cat > /sbp/mq_dev/jobs/ci@zkh_ursv@999.json << 'JOB_EOF'
 {
   "bank": "ci",
   "base": "zkh_ursv",
@@ -49,26 +51,21 @@ cat > /sbp/mq_dev/jobs/ci@zkh_ursv@999.json << 'EOF'
   "total_requests": 2,
   "status": "pending"
 }
-EOF
+JOB_EOF
 
-# 5. Удаляем блокировку
 redis-cli -n 1 DEL "lock:job:ci:zkh_ursv:999" > /dev/null 2>&1
 
-# 6. Проверяем файлы
-echo "   ✅ Файл 7845.json: $(ls -la /sbp/mq_dev/ci/zkh_ursv/7845.json | awk '{print $5}') байт"
-echo "   ✅ Job-файл: $(ls -la /sbp/mq_dev/jobs/ci@zkh_ursv@999.json | awk '{print $5}') байт"
+echo "   ✅ Тестовые файлы созданы"
 echo ""
 
 # ============================================================
 # ТЕСТЫ
 # ============================================================
 
-# 1. Статус Job
 echo "1. Статус Job:"
 curl -s "$BASE_URL/create_payload_mq/$BANK/$BASE/$JOB_ID/status" | jq .
 echo ""
 
-# 2. Создание Job
 echo "2. Создание Job:"
 RESPONSE=$(curl -s "$BASE_URL/create_payload_mq/$BANK/$BASE/$JOB_ID")
 echo "$RESPONSE" | jq .
@@ -81,18 +78,15 @@ else
 fi
 echo ""
 
-# 3. Статус задачи (ждём 2 секунды для обработки Worker'ом)
 echo "3. Статус задачи (через 5 сек):"
 sleep 5
 curl -s "$BASE_URL/queue/status/$TASK_ID" | jq .
 echo ""
 
-# 4. Результат задачи
 echo "4. Результат задачи:"
 curl -s "$BASE_URL/queue/result/$TASK_ID" | jq .
 echo ""
 
-# 5. Повторное создание (блокировка)
 echo "5. Повторное создание (блокировка):"
 curl -s "$BASE_URL/create_payload_mq/$BANK/$BASE/$JOB_ID" | jq .
 echo ""

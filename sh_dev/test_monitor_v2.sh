@@ -18,7 +18,12 @@
 
 cd /var/www/html/sbp_mq_dev
 
-BASE_URL="http://localhost:8512"
+# Загружаем .env
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+source "$PROJECT_DIR/sh_common/load_env.sh" "$PROJECT_DIR" || exit 1
+
+BASE_URL="http://localhost:${SBP_MQ_PORT}"
 BASES=("zkh_ursv" "zkh_ursv2" "zkh_ursv3")
 JOBS=(100 101 102)   # базовые индексы, преобразуются в уникальные
 

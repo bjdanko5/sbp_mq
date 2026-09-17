@@ -5,6 +5,18 @@
 # НАСТРОЙКИ
 # ============================================================
 
+
+# Загружаем .env
+
+# Загружаем .env
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+DEV_DIR="$(dirname "$SCRIPT_DIR")"
+source "$DEV_DIR/sh_common/load_env.sh" "$DEV_DIR" || exit 1
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+DEV_DIR="$(dirname "$SCRIPT_DIR")"
+source "$DEV_DIR/sh_common/load_env.sh" "$DEV_DIR" || exit 1
+
 PROJECT_DIR="/var/www/html/sbp_mq"
 BACKUP_DIR="/var/www/html/backups"
 OWNER="user"
@@ -224,9 +236,9 @@ done
 
 # Проверка HTTP
 echo ""
-echo "🌐 Проверка HTTP (порт 8511)..."
+echo "🌐 Проверка HTTP (порт ${SBP_MQ_PORT})..."
 sleep 5
-HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8511/ 2>/dev/null || echo "000")
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:${SBP_MQ_PORT}/ 2>/dev/null || echo "000")
 if [ "$HTTP_CODE" = "200" ]; then
     echo "   ✅ HTTP: $HTTP_CODE"
 else

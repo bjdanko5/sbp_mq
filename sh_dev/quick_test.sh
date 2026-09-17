@@ -1,9 +1,12 @@
 #!/bin/bash
-# quick_test.sh — Быстрый тест MQ с 5 файлами
+# quick_test.sh — быстрый тест MQ (dev)
 
-cd /var/www/html/sbp_mq_dev
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
-echo "🧪 БЫСТРЫЙ ТЕСТ MQ (5 файлов)"
+source "$PROJECT_DIR/sh_common/load_env.sh" "$PROJECT_DIR" || exit 1
+
+echo "🧪 БЫСТРЫЙ ТЕСТ MQ (5 файлов) — порт $SBP_MQ_PORT"
 echo "================================"
 echo ""
 
@@ -17,18 +20,18 @@ for i in 7845 7846 7847 7848 7849; do
 done
 
 echo "   ✅ Создано файлов: $(ls /sbp/mq_dev/ci/zkh_ursv/*.json | wc -l)"
+echo ""
 
 # 2. Очищаем старые Job
-echo ""
 echo "🗑️  Очистка старых Job..."
 rm -f /sbp/mq_dev/jobs/error/ci@zkh_ursv@999.json
 rm -f /sbp/mq_dev/jobs/ci@zkh_ursv@999.json
 rm -f /sbp/mq_dev/jobs/success/ci@zkh_ursv@999.json
 redis-cli -n 1 DEL "lock:job:ci:zkh_ursv:999" > /dev/null 2>&1
 echo "   ✅ Очищено"
+echo ""
 
 # 3. Создаём Job с 5 файлами
-echo ""
 echo "📝 Создание Job с 5 файлами..."
 
 cat > /sbp/mq_dev/jobs/ci@zkh_ursv@999.json << 'JOB_EOF'
@@ -50,12 +53,12 @@ cat > /sbp/mq_dev/jobs/ci@zkh_ursv@999.json << 'JOB_EOF'
 }
 JOB_EOF
 
-echo "   ✅ Job создан: $(cat /sbp/mq_dev/jobs/ci@zkh_ursv@999.json | jq -r '.files | length') файлов"
+echo "   ✅ Job создан"
+echo ""
 
 # 4. Создаём задачу через API
-echo ""
 echo "🚀 Отправка задачи..."
-RESPONSE=$(curl -s "http://localhost:8512/create_payload_mq/ci/zkh_ursv/999")
+RESPONSE=$(curl -s "http://localhost:${SBP_MQ_PORT}/create_payload_mq/ci/zkh_ursv/999")
 TASK_ID=$(echo "$RESPONSE" | jq -r '.data.task_id')
 
 if [ -z "$TASK_ID" ] || [ "$TASK_ID" == "null" ]; then
@@ -65,16 +68,16 @@ if [ -z "$TASK_ID" ] || [ "$TASK_ID" == "null" ]; then
 fi
 
 echo "   ✅ TASK_ID: $TASK_ID"
+echo ""
 
 # 5. Мониторинг прогресса
-echo ""
 echo "📊 МОНИТОРИНГ ПРОГРЕССА"
 echo "========================"
 
 for i in $(seq 1 30); do
     PROGRESS=$(redis-cli -n 1 GET "progress:$TASK_ID" 2>/dev/null)
     RESULT=$(redis-cli -n 1 GET "task:$TASK_ID" 2>/dev/null)
-    
+
     if [ -n "$RESULT" ] && [ "$RESULT" != "(nil)" ]; then
         STATUS=$(echo "$RESULT" | jq -r '.status')
         echo "[$i] ✅ РЕЗУЛЬТАТ: $STATUS"
@@ -100,7 +103,7 @@ echo "RESULT существует:   $(redis-cli -n 1 EXISTS "task:$TASK_ID") (1
 
 echo ""
 echo "📋 РЕЗУЛЬТАТ:"
-curl -s "http://localhost:8512/queue/result/$TASK_ID" | jq '.data.result | {status, summary}'
+curl -s "http://localhost:${SBP_MQ_PORT}/queue/result/$TASK_ID" | jq '.data.result | {status, summary}'
 
 echo ""
 echo "✅ Тест завершён!"

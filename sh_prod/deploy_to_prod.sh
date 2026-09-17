@@ -172,7 +172,7 @@ echo -e "${YELLOW}⏳ Ожидание HTTP на порту ${PROD_PORT}...${NC}
 HEALTH_OK=0
 for i in $(seq 1 30); do
     code=$(timeout 2 curl -s -o /dev/null -w "%{http_code}" \
-        "http://localhost:${PROD_PORT}/health" 2>/dev/null)
+        "http://localhost:${PROD_PORT}/health" 2>/dev/null || true)
     code="${code:-000}"
 
     if [ "$code" = "200" ]; then

@@ -75,7 +75,10 @@ async def health_detailed():
     
     # === Workers ===
     result["components"]["workers"] = _check_workers()
-    
+
+    # === CallbackStats ===
+    result["components"]["callback_stats"] = await _check_callback_stats()
+
     # === Общий статус ===
     for comp_name, comp_data in result["components"].items():
         if comp_data.get("status") == "error":
@@ -201,7 +204,24 @@ def _check_workers() -> dict:
     except Exception as e:
         return {"status": "error", "error": str(e)}
 
-
+async def _check_callback_stats() -> dict:
+    """Проверка CallbackStats (Redis)."""
+    try:
+        from modules.callback_stats import callback_stats
+        
+        if callback_stats._redis is None:
+            return {"status": "warning", "error": "не подключён"}
+        
+        # Ping
+        await callback_stats._redis.ping()
+        
+        return {
+            "status": "ok",
+            "connected": True,
+        }
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+    
 # ============================================================
 #                   УТИЛИТЫ
 # ============================================================

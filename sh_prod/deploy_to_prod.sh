@@ -2,11 +2,13 @@
 # deploy_to_prod.sh — деплой dev → prod
 #
 # Логика портов:
-#   - DEV  .env → $SBP_MQ_PORT (8512) — только для лога (не используется для проверок PROD)
+#   - DEV  .env → $SBP_MQ_PORT (8512) — только для лога
 #   - PROD .env → $SBP_MQ_PORT (8511) — для проверки PROD и healthcheck
 #
-# ⚠️ ВАЖНО: после загрузки DEV .env делаем load_env "$PROD_DIR",
-#    чтобы $SBP_MQ_PORT указывал на PROD (8511).
+# ⚠️ ВАЖНО: проекты используют git worktree (общий .git):
+#   - $DEV_DIR  → worktree с веткой dev
+#   - $PROD_DIR → worktree с веткой main
+#   - Ветки dev и main — общие, не могут быть checked out в двух папках одновременно.
 #
 # Healthcheck: ретраи 30×1 сек (ждём полной инициализации uvicorn+debugpy).
 
@@ -26,8 +28,6 @@ DEV_DIR="$(dirname "$SCRIPT_DIR")"
 # ============================================================
 
 source "$DEV_DIR/sh_common/load_env.sh" "$DEV_DIR" || exit 1
-
-# Запоминаем DEV-порт (только для лога)
 DEV_PORT="$SBP_MQ_PORT"
 
 # ============================================================
@@ -45,7 +45,6 @@ if [ ! -f "$PROD_DIR/.env" ]; then
 fi
 
 source "$DEV_DIR/sh_common/load_env.sh" "$PROD_DIR" || exit 1
-
 PROD_PORT="$SBP_MQ_PORT"
 
 # ============================================================
@@ -70,6 +69,25 @@ if [ "$CURRENT_DIR" != "$DEV_DIR" ]; then
     echo -e "${RED}❌ Запустите из $DEV_DIR${NC}"
     exit 1
 fi
+
+# ============================================================
+# ПРОВЕРКА WORKTREE (DEV=dev, PROD=main)
+# ============================================================
+
+DEV_BRANCH=$(cd "$DEV_DIR" && git branch --show-current 2>/dev/null || echo "?")
+PROD_BRANCH=$(cd "$PROD_DIR" && git branch --show-current 2>/dev/null || echo "?")
+
+if [ "$DEV_BRANCH" != "dev" ]; then
+    echo -e "${RED}❌ $DEV_DIR не на ветке 'dev' (текущая: $DEV_BRANCH)${NC}"
+    exit 1
+fi
+
+if [ "$PROD_BRANCH" != "main" ]; then
+    echo -e "${RED}❌ $PROD_DIR не на ветке 'main' (текущая: $PROD_BRANCH)${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}✅ Worktree: DEV=$DEV_BRANCH, PROD=$PROD_BRANCH${NC}"
 
 # ============================================================
 # ПРОВЕРКА DEV — git status
@@ -124,12 +142,12 @@ echo -e "${GREEN}✅ Dev запушен${NC}"
 # ============================================================
 # MERGE DEV → MAIN В PROD
 # ============================================================
+# PROD привязан к ветке main через worktree — checkout не нужен.
 
 cd "$PROD_DIR"
 echo ""
 echo -e "${YELLOW}🔀 Merge dev → main в PROD${NC}"
 
-git checkout main
 git pull origin main
 git merge dev
 git push origin main
@@ -147,8 +165,6 @@ sudo systemctl restart sbp_mq-debug.service
 # ============================================================
 # HEALTHCHECK С РЕТРАЯМИ
 # ============================================================
-# uvicorn + debugpy + MQClient + Redis поднимаются ~15-25 сек.
-# Делаем 30 попыток с интервалом 1 сек.
 
 echo ""
 echo -e "${YELLOW}⏳ Ожидание HTTP на порту ${PROD_PORT}...${NC}"
@@ -156,7 +172,8 @@ echo -e "${YELLOW}⏳ Ожидание HTTP на порту ${PROD_PORT}...${NC}
 HEALTH_OK=0
 for i in $(seq 1 30); do
     code=$(timeout 2 curl -s -o /dev/null -w "%{http_code}" \
-        "http://localhost:${PROD_PORT}/health" 2>/dev/null || echo "000")
+        "http://localhost:${PROD_PORT}/health" 2>/dev/null)
+    code="${code:-000}"
 
     if [ "$code" = "200" ]; then
         echo -e "   [${i}/30] ${GREEN}✅ HTTP 200${NC}"
@@ -164,7 +181,6 @@ for i in $(seq 1 30); do
         break
     fi
 
-    # Показываем прогресс каждые 5 попыток + первую
     if [ "$i" -eq 1 ] || [ $((i % 5)) -eq 0 ]; then
         echo -e "   [${i}/30] HTTP: ${code}"
     fi

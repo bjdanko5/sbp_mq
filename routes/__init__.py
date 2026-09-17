@@ -21,7 +21,7 @@ def register_routes(app: FastAPI):
     app.include_router(main_router)
     app.include_router(health_router)          # ← НОВЫЙ
     app.include_router(clear_db_router)
-    app.include_router(test_router)
+    #app.include_router(test_router)
     app.include_router(create_payload_router)
     app.include_router(create_payload_mq_router)
     app.include_router(get_payload_router)

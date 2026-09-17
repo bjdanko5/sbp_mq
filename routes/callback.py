@@ -1,7 +1,7 @@
 # routes/callback.py
 import json
 from fastapi import APIRouter, HTTPException, Body
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Tuple, Any
 
 import config
 from modules import db, common_soap
@@ -9,53 +9,63 @@ from modules.request_storage import request_storage
 from modules.mq_client import mq_client
 from modules.logger_config import logger, get_function_stack, log_error_with_context
 from modules.response_utils import create_response
+from modules.callback_stats import callback_stats
 from models.schemas import PayloadItem
 
 router = APIRouter()
 
 
 # ============================================================
-#            ПОИСК BASE ПО REQUESTID (Redis + fallback SQLite)
+#            ПОИСК BASE И TASK_INFO ПО REQUESTID
 # ============================================================
 
 async def resolve_bases_for_requests(
     request_ids: List[str]
-) -> Dict[str, Optional[str]]:
+) -> Tuple[
+    Dict[str, Optional[str]],       # request_id → base
+    Dict[str, Dict[str, Any]],      # task_id → {bank, base, job_id}
+    Dict[str, Optional[str]],       # request_id → task_id
+]:
     """
-    Находит base для каждого requestID.
+    Находит base и task_info для каждого requestID.
     
     Логика:
-    1. Пробуем Redis: req:{requestID} → task_id → task:{task_id} → base
-    2. Fallback: SQLite (db.get_bases_for_requests)
-    
-    Args:
-        request_ids: Список requestID
+    1. Redis: req:{requestID} → task_id
+    2. task:{task_id} → bank, base, job_id
+    3. Fallback: SQLite → base (task_info не будет)
     
     Returns:
-        Dict[str, Optional[str]]: {requestID: base или None}
+        Tuple из трёх словарей:
+        1. {requestID: base или None}
+        2. {task_id: {"bank", "base", "job_id"}}
+        3. {requestID: task_id или None}
     """
     stack = get_function_stack()
-    result: Dict[str, Optional[str]] = {rid: None for rid in request_ids}
     
-    # === Шаг 1: Redis ===
-    task_ids = await request_storage.get_task_ids_for_requests(request_ids)
+    # === Шаг 1: Redis — task_id для request_id ===
+    rid_to_task_id = await request_storage.get_task_ids_for_requests(request_ids)
     
-    # Собираем уникальные task_id
-    unique_task_ids = set(tid for tid in task_ids.values() if tid)
+    # Уникальные task_id
+    unique_task_ids = {tid for tid in rid_to_task_id.values() if tid}
     
-    # Читаем task:{task_id} для каждого уникального task_id
-    task_to_base: Dict[str, Optional[str]] = {}
+    # === Шаг 2: Читаем task:* ===
+    task_info: Dict[str, Dict[str, Any]] = {}
     for tid in unique_task_ids:
         task_data = await mq_client.get_result(tid)
         if task_data:
-            task_to_base[tid] = task_data.get('base')
+            task_info[tid] = {
+                "bank": task_data.get("bank"),
+                "base": task_data.get("base"),
+                "job_id": task_data.get("job_id"),
+            }
     
-    # Проставляем base из Redis
-    for rid, tid in task_ids.items():
-        if tid and tid in task_to_base:
-            result[rid] = task_to_base[tid]
+    # === Шаг 3: base для каждого request_id ===
+    result: Dict[str, Optional[str]] = {rid: None for rid in request_ids}
+    for rid, tid in rid_to_task_id.items():
+        if tid and tid in task_info:
+            result[rid] = task_info[tid].get("base")
     
-    # === Шаг 2: Fallback — SQLite ===
+    # === Шаг 4: Fallback — SQLite ===
     not_found = [rid for rid, base in result.items() if not base]
     
     if not_found:
@@ -64,30 +74,27 @@ async def resolve_bases_for_requests(
             f"пробуем SQLite: {not_found[:10]}..."
         )
         
-        # ✅ Используем существующий db.get_bases_for_requests (batch)
         db_bases, db_error = db.get_bases_for_requests(not_found)
         
         if db_error:
             log_error_with_context(
                 Exception(str(db_error)),
-                f"callback fallback get_bases_for_requests"
+                "callback fallback get_bases_for_requests"
             )
         else:
             for rid, base in db_bases.items():
                 if base:
                     result[rid] = base
-                    logger.debug(
-                        f"[{stack}] Fallback SQLite: {rid} → {base}"
-                    )
+                    logger.debug(f"[{stack}] Fallback SQLite: {rid} → {base}")
     
     # === Итог ===
     found = sum(1 for b in result.values() if b)
     logger.debug(
-        f"[{stack}] Найдено base: {found}/{len(request_ids)} "
-        f"(Redis + SQLite)"
+        f"[{stack}] Найдено base: {found}/{len(request_ids)}, "
+        f"task_info: {len(task_info)}"
     )
     
-    return result
+    return result, task_info, rid_to_task_id
 
 
 # ============================================================
@@ -100,7 +107,7 @@ async def handle_callback(payload: list[PayloadItem] = Body(..., max_length=1000
         stack = get_function_stack()
         logger.debug(f"[{stack}] Получен callback с {len(payload)} запросами")
         
-        # ✅ Логируем requestID
+        # Логируем requestID
         request_ids = [item.requestId for item in payload]
         logger.debug(f"[{stack}] Payload requestIds: {request_ids}")
         
@@ -111,8 +118,10 @@ async def handle_callback(payload: list[PayloadItem] = Body(..., max_length=1000
             )
             logger.debug(f"[{stack}] Payload (full): {payload_json}")
         
-        # === Резолвим base для каждого requestID ===
-        request_to_base = await resolve_bases_for_requests(request_ids)
+        # === Резолвим base + task_info ===
+        request_to_base, task_info, rid_to_task_id = await resolve_bases_for_requests(
+            request_ids
+        )
         
         # === Группируем по базам ===
         base_to_payload: Dict[str, List[dict]] = {}
@@ -145,7 +154,7 @@ async def handle_callback(payload: list[PayloadItem] = Body(..., max_length=1000
                 responses[base] = {"status": "skipped", "message": "Нет запросов"}
                 continue
             
-            # ✅ Логируем данные перед отправкой в SOAP
+            # Логируем данные перед отправкой в SOAP
             soap_payload = json.dumps(items, ensure_ascii=False)
             logger.debug(f"[{stack}] Отправка в SOAP (база {base}): {soap_payload}")
             
@@ -157,10 +166,38 @@ async def handle_callback(payload: list[PayloadItem] = Body(..., max_length=1000
                 Payload=soap_payload
             )
             
+            # === Определяем request_ids этой базы ===
+            items_request_ids = [item['requestId'] for item in items]
+            
+            # === Обновляем статистику callback'ов ===
+            # Для каждого request_id находим task_info и увеличиваем счётчик
+            error_msg = None
+            if soap_error:
+                error_msg = soap_error.get("error", "Unknown SOAP error")
+            
+            for rid in items_request_ids:
+                tid = rid_to_task_id.get(rid)
+                if tid and tid in task_info:
+                    info = task_info[tid]
+                    bank = info.get("bank")
+                    base_name = info.get("base")
+                    job_id = info.get("job_id")
+                    
+                    if bank and base_name and job_id is not None:
+                        # ✅ Инкремент счётчика
+                        await callback_stats.increment(bank, base_name, job_id)
+                        
+                        # ✅ Сохранение ошибки (если есть)
+                        if error_msg:
+                            await callback_stats.save_error(
+                                bank, base_name, job_id, error_msg
+                            )
+            
+            # === Формируем ответ ===
             if soap_error:
                 responses[base] = {
                     "status": "error",
-                    "error": soap_error.get("error", "SOAP ошибка"),
+                    "error": error_msg or "SOAP ошибка",
                     "base": base
                 }
                 continue
@@ -175,12 +212,7 @@ async def handle_callback(payload: list[PayloadItem] = Body(..., max_length=1000
                 responses[base] = {"status": "success", "response": soap_response}
             
             # === Удаляем requestID ===
-            items_request_ids = [item['requestId'] for item in items]
-            
-            # Из Redis
             deleted_redis = await request_storage.delete_requests(items_request_ids)
-            
-            # Из SQLite (fallback — на случай, если там что-то осталось)
             deleted_db, delete_error = db.clear_multiple_db(items_request_ids)
             
             if delete_error:

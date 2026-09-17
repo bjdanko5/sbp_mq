@@ -5,6 +5,7 @@
 Поддерживает:
 - Отображение активных задач (progress)
 - Отображение завершённых задач (task) за последние 5 минут
+- Отображение callback-статистики (количество + последняя ошибка)
 - Фильтрацию по банку, базе, статусу, поиску
 - Автообновление каждые 2 секунды
 - Копирование task_id в буфер обмена
@@ -18,6 +19,7 @@ import json
 
 import config
 from modules.mq_client import mq_client
+from modules.callback_stats import callback_stats
 from modules.logger_config import logger
 
 router = APIRouter()
@@ -121,6 +123,20 @@ async def get_all_tasks() -> dict:
             except json.JSONDecodeError:
                 pass
     
+    # === Обогащаем callback-статистикой ===
+    # Для каждого Job читаем callback:count и callback:last_error
+    for job in processing + completed:
+        bank = job.get('bank')
+        base = job.get('base')
+        job_id = job.get('job_id')
+        
+        if bank and base and job_id is not None:
+            job['callback_count'] = await callback_stats.get_count(bank, base, job_id)
+            job['callback_last_error'] = await callback_stats.get_last_error(bank, base, job_id)
+        else:
+            job['callback_count'] = 0
+            job['callback_last_error'] = None
+    
     # === Сортируем: свежие сверху ===
     processing.sort(key=lambda x: x.get('started_at', ''), reverse=True)
     completed.sort(key=lambda x: x.get('finished_at', ''), reverse=True)
@@ -156,6 +172,49 @@ def render_status_badge(status: str) -> str:
     return f'<span class="badge" style="background:{color};">{label}</span>'
 
 
+def _render_callback_html(
+    callback_count: int,
+    callback_last_error: Optional[dict]
+) -> str:
+    """
+    Формирует HTML для callback-статистики.
+    
+    Args:
+        callback_count: Количество callback'ов (обработанных requestId)
+        callback_last_error: Последняя ошибка (dict) или None
+    
+    Returns:
+        str: HTML-блок или пустая строка
+    """
+    if callback_count == 0:
+        return ""
+    
+    # ✅ Счётчик callback'ов
+    html = f'''
+    <div class="card-callback">
+        <span class="callback-count">📞 Callback'ов: {callback_count}</span>
+    </div>
+    '''
+    
+    # ✅ Последняя ошибка (если есть)
+    if callback_last_error:
+        error_text = callback_last_error.get('error', '')
+        error_time = callback_last_error.get('timestamp', '')
+        
+        # Обрезаем текст для отображения (полный — в title)
+        error_short = error_text[:100] + ('...' if len(error_text) > 100 else '')
+        error_time_short = error_time[:19].replace('T', ' ') if error_time else '—'
+        
+        html += f'''
+        <div class="card-callback-error" title="{error_text}">
+            ❌ {error_short}
+            <span class="time">🕐 {error_time_short}</span>
+        </div>
+        '''
+    
+    return html
+
+
 def render_progress_card(job: dict) -> str:
     """Карточка активной задачи."""
     task_id = job.get('task_id', '')
@@ -171,7 +230,14 @@ def render_progress_card(job: dict) -> str:
     errors = job.get('error_files', 0)
     started = job.get('started_at', '')
     
+    # ✅ Callback-статистика
+    callback_count = job.get('callback_count', 0)
+    callback_last_error = job.get('callback_last_error')
+    
     started_short = started[:19].replace('T', ' ') if started else '—'
+    
+    # ✅ HTML callback-блока
+    callback_html = _render_callback_html(callback_count, callback_last_error)
     
     return f'''
     <div class="card processing" data-bank="{bank}" data-base="{base}" data-status="processing">
@@ -195,6 +261,7 @@ def render_progress_card(job: dict) -> str:
         <div class="card-current">
             📄 Сейчас: <strong>{current}</strong>
         </div>
+        {callback_html}
         <div class="card-footer">
             <div class="task-id-block">
                 <span class="task-id-label">🔑</span>
@@ -218,7 +285,14 @@ def render_completed_card(job: dict) -> str:
     summary = job.get('summary', {})
     finished = job.get('finished_at', '')
     
+    # ✅ Callback-статистика
+    callback_count = job.get('callback_count', 0)
+    callback_last_error = job.get('callback_last_error')
+    
     finished_short = finished[:19].replace('T', ' ') if finished else '—'
+    
+    # ✅ HTML callback-блока
+    callback_html = _render_callback_html(callback_count, callback_last_error)
     
     return f'''
     <div class="card {status}" data-bank="{bank}" data-base="{base}" data-status="{status}">
@@ -234,6 +308,7 @@ def render_completed_card(job: dict) -> str:
             <span title="Успешных запросов" class="success">✅ {summary.get('success_requests', 0)}</span>
             <span title="Ошибок" class="errors">❌ {summary.get('error_requests', 0)}</span>
         </div>
+        {callback_html}
         <div class="card-footer">
             <div class="task-id-block">
                 <span class="task-id-label">🔑</span>
@@ -554,6 +629,43 @@ def render_monitor_html() -> str:
             background: #f5f5f5;
             border-radius: 6px;
             word-break: break-all;
+        }
+        
+        /* ✅ Callback-статистика */
+        .card-callback {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: #1976d2;
+            margin-bottom: 8px;
+            padding: 6px 10px;
+            background: #e3f2fd;
+            border-radius: 6px;
+            border-left: 3px solid #1976d2;
+        }
+        
+        .callback-count {
+            font-weight: 600;
+        }
+        
+        .card-callback-error {
+            font-size: 12px;
+            color: #c62828;
+            margin-bottom: 8px;
+            padding: 6px 10px;
+            background: #ffebee;
+            border-radius: 6px;
+            border-left: 3px solid #c62828;
+            word-break: break-word;
+            line-height: 1.4;
+        }
+        
+        .card-callback-error .time {
+            display: block;
+            margin-top: 4px;
+            color: #999;
+            font-size: 11px;
         }
         
         .card-footer {

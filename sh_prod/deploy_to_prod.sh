@@ -2,11 +2,13 @@
 # deploy_to_prod.sh — деплой dev → prod
 #
 # Логика портов:
-#   - DEV  .env → $SBP_MQ_PORT (8512) — для проверки DEV (не используется здесь)
+#   - DEV  .env → $SBP_MQ_PORT (8512) — только для лога (не используется для проверок PROD)
 #   - PROD .env → $SBP_MQ_PORT (8511) — для проверки PROD и healthcheck
 #
 # ⚠️ ВАЖНО: после загрузки DEV .env делаем load_env "$PROD_DIR",
 #    чтобы $SBP_MQ_PORT указывал на PROD (8511).
+#
+# Healthcheck: ретраи 30×1 сек (ждём полной инициализации uvicorn+debugpy).
 
 set -e
 
@@ -141,15 +143,59 @@ echo -e "${GREEN}✅ Merge выполнен${NC}"
 echo ""
 echo -e "${YELLOW}🔄 Перезапуск sbp_mq-debug.service${NC}"
 sudo systemctl restart sbp_mq-debug.service
-sleep 10
 
 # ============================================================
-# HEALTHCHECK
+# HEALTHCHECK С РЕТРАЯМИ
+# ============================================================
+# uvicorn + debugpy + MQClient + Redis поднимаются ~15-25 сек.
+# Делаем 30 попыток с интервалом 1 сек.
+
+echo ""
+echo -e "${YELLOW}⏳ Ожидание HTTP на порту ${PROD_PORT}...${NC}"
+
+HEALTH_OK=0
+for i in $(seq 1 30); do
+    code=$(timeout 2 curl -s -o /dev/null -w "%{http_code}" \
+        "http://localhost:${PROD_PORT}/health" 2>/dev/null || echo "000")
+
+    if [ "$code" = "200" ]; then
+        echo -e "   [${i}/30] ${GREEN}✅ HTTP 200${NC}"
+        HEALTH_OK=1
+        break
+    fi
+
+    # Показываем прогресс каждые 5 попыток + первую
+    if [ "$i" -eq 1 ] || [ $((i % 5)) -eq 0 ]; then
+        echo -e "   [${i}/30] HTTP: ${code}"
+    fi
+    sleep 1
+done
+
+# ============================================================
+# РЕЗУЛЬТАТ
 # ============================================================
 
 echo ""
+echo -e "${GREEN}════════════════════════════════════════${NC}"
 echo -e "${GREEN}🎉 ДЕПЛОЙ ЗАВЕРШЁН${NC}"
+echo -e "${GREEN}════════════════════════════════════════${NC}"
 echo ""
-echo -n "PROD (:$PROD_PORT) /health: "
-timeout 5 curl -s "http://localhost:${PROD_PORT}/health" | jq -c . 2>/dev/null || echo "❌"
+
+if [ "$HEALTH_OK" -eq 1 ]; then
+    echo -n "PROD (:$PROD_PORT) /health:     "
+    timeout 5 curl -s "http://localhost:${PROD_PORT}/health" | jq -c . 2>/dev/null || echo "❌"
+
+    echo -n "PROD (:$PROD_PORT) /health/detailed: "
+    timeout 10 curl -s "http://localhost:${PROD_PORT}/health/detailed" \
+        | jq -c '{status, queue: .components.rabbitmq.queue, db: .components.redis.db, workers: .components.workers.active}' 2>/dev/null || echo "❌"
+else
+    echo -e "${RED}❌ PROD не поднялся за 30 сек!${NC}"
+    echo ""
+    echo -e "${YELLOW}📋 Последние 30 строк логов:${NC}"
+    echo -e "${BLUE}────────────────────────────────────────${NC}"
+    sudo journalctl -u sbp_mq-debug.service -n 30 --no-pager 2>/dev/null || true
+    echo -e "${BLUE}────────────────────────────────────────${NC}"
+    exit 1
+fi
+
 echo ""

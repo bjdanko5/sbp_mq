@@ -4,8 +4,8 @@
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DEV_DIR="$(dirname "$SCRIPT_DIR")"
 
-# Загружаем .env из DEV
 source "$DEV_DIR/sh_common/load_env.sh" "$DEV_DIR" || exit 1
+source "$DEV_DIR/sh_common/load_env.sh" "$PROD_DIR"
 
 echo "🔄 Перезапуск sbp_mq (порт $SBP_MQ_PORT)"
 echo "   PROD_DIR: $PROD_DIR"

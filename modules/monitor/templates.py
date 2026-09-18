@@ -177,6 +177,10 @@ def render_monitor_html() -> str:
         .card.error { border-left-color: #c62828; }
         .card.pending { border-left-color: #f57c00; }
         
+        /* API банков */
+        .card.bank-available { border-left-color: #388e3c; }
+        .card.bank-error { border-left-color: #c62828; }
+        
         .card-header {
             display: flex;
             justify-content: space-between;
@@ -407,7 +411,7 @@ def render_monitor_html() -> str:
             </div>
             <div class="header-status">
                 <span class="status-dot"></span>
-                <span id="status-text">Автообновление: 2 сек</span>
+                <span id="status-text">WS: подключение...</span>
             </div>
         </div>
         
@@ -441,6 +445,14 @@ def render_monitor_html() -> str:
                 <option value="error">❌ С ошибками</option>
             </select>
             <button onclick="resetFilters()">🔄 Сброс</button>
+        </div>
+        
+        <!-- 🏦 API банков -->
+        <div class="section">
+            <h2>🏦 API банков <span class="count" id="bank-api-count">0</span></h2>
+            <div class="cards-grid" id="bank-api-grid">
+                <div class="empty">Ожидание данных (первая проверка через 60 сек)...</div>
+            </div>
         </div>
         
         <div id="cards-container"><div class="empty">Загрузка...</div></div>
@@ -497,7 +509,58 @@ def render_monitor_html() -> str:
             // Карточки (HTML от сервера)
             document.getElementById('cards-container').innerHTML = data.cards_html;
             
+            // 🏦 API банков
+            if (data.bank_api) {
+                renderBankApi(data.bank_api);
+            }
+            
             applyFilters();
+        }
+        
+        function renderBankApi(banks) {
+            const container = document.getElementById('bank-api-grid');
+            const countEl = document.getElementById('bank-api-count');
+            
+            if (!banks || Object.keys(banks).length === 0) {
+                container.innerHTML = '<div class="empty">Нет данных</div>';
+                countEl.textContent = '0';
+                return;
+            }
+            
+            countEl.textContent = Object.keys(banks).length;
+            
+            const cards = Object.entries(banks).map(([bank, info]) => {
+                const available = info.available;
+                const statusClass = available ? 'bank-available' : 'bank-error';
+                const color = available ? '#388e3c' : '#c62828';
+                const label = available ? 'ДОСТУПЕН' : 'НЕДОСТУПЕН';
+                const latency = info.latency_ms != null ? `${info.latency_ms} мс` : '—';
+                const host = info.host ? `${info.host}:${info.port}` : '—';
+                const errorType = info.error_type || '';
+                const checked = info.checked_at ? info.checked_at.slice(11, 19) : '—';
+                
+                return `
+                    <div class="card ${statusClass}" data-status="${statusClass}">
+                        <div class="card-header">
+                            <div class="card-title">
+                                <span class="bank">${bank.toUpperCase()}</span>
+                            </div>
+                            <span class="badge" style="background:${color};">${label}</span>
+                        </div>
+                        <div class="card-name">${host}</div>
+                        <div class="card-stats">
+                            <span>⏱️ ${latency}</span>
+                            ${errorType ? `<span style="color:#c62828;">🔴 ${errorType}</span>` : ''}
+                        </div>
+                        ${info.error ? `<div class="card-current" style="color:#c62828;">${info.error}</div>` : ''}
+                        <div class="card-footer">
+                            <span class="time">🕐 ${checked}</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            container.innerHTML = cards;
         }
         
         function updateFilterOptions(selectId, values, placeholder) {

@@ -15,6 +15,7 @@ from modules.logger_config import configure_uvicorn_access_filter
 from modules.mq_client import mq_client
 from modules.request_storage import request_storage
 from modules.callback_stats import callback_stats       # ← ДОБАВЛЕНО
+from modules.monitor import monitor_poller             # ← ДОБАВЛЕНО
 from modules.worker import worker
 from modules.exceptions import register_exception_handlers
 from modules.logger_config import logger
@@ -55,7 +56,26 @@ async def lifespan(app: FastAPI):
         logger.error(f"❌ Ошибка при инициализации: {e}")
         raise   # ← если startup упал, приложение не запустится
     
+    # ============================================================
+    # ЗАПУСК WS POLLER
+    # ============================================================
+    stop_event = asyncio.Event()
+    poller_task = asyncio.create_task(monitor_poller(stop_event))
+    logger.info("✅ Monitor WS poller запущен")
+    
     yield   # ← приложение работает
+    
+    # ============================================================
+    # ОСТАНОВКА WS POLLER
+    # ============================================================
+    logger.info("🛑 Останавливаем WS poller...")
+    stop_event.set()
+    try:
+        await asyncio.wait_for(poller_task, timeout=5.0)
+        logger.info("✅ WS poller остановлен")
+    except asyncio.TimeoutError:
+        poller_task.cancel()
+        logger.warning("⚠️ WS poller не остановился за 5 сек, отменён")
     
     # ============================================================
     # SHUTDOWN

@@ -72,7 +72,9 @@ async def monitor_poller(stop_event: asyncio.Event) -> None:
     while not stop_event.is_set():
         try:
             data = await get_monitor_data()
-            current_hash = json.dumps(data, sort_keys=True, default=str)
+            # Сравниваем БЕЗ timestamp (он всегда новый)
+            data_for_hash = {k: v for k, v in data.items() if k != 'timestamp'}
+            current_hash = json.dumps(data_for_hash, sort_keys=True, default=str)
             
             if current_hash != last_hash:
                 await manager.broadcast(data)

@@ -1,5 +1,5 @@
 # modules/monitor/__init__.py
-"""Monitor — модуль мониторинга."""
+"""Monitor — модуль мониторинга активных задач."""
 
 from .data import get_monitor_data
 from .render import (
@@ -10,6 +10,7 @@ from .render import (
     render_cards_html,
     COMPLETED_TTL_MINUTES,
 )
+from .templates import render_monitor_html
 
 __all__ = [
     "get_monitor_data",
@@ -19,4 +20,5 @@ __all__ = [
     "render_completed_card",
     "render_cards_html",
     "COMPLETED_TTL_MINUTES",
+    "render_monitor_html",
 ]

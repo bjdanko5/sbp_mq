@@ -120,6 +120,11 @@ bank_api_state = BankApiHealthState()
 bank_api_last: dict = {}
 
 
+def get_bank_api_last() -> dict:
+    """Возвращает последний статус банков (актуальный)."""
+    return bank_api_last
+
+
 async def bank_api_poller(stop_event: asyncio.Event) -> None:
     """TCP-проверка банков с backoff."""
     global bank_api_last

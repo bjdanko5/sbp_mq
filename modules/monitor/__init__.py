@@ -17,6 +17,7 @@ from .ws import (
     bank_api_poller,
     manager,
     bank_api_state,
+    get_bank_api_last,
 )
 
 __all__ = [
@@ -33,4 +34,5 @@ __all__ = [
     "manager",
     "bank_api_poller",
     "bank_api_state",
+    "get_bank_api_last",
 ]

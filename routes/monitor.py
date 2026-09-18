@@ -26,6 +26,7 @@ from modules.monitor import (
     render_cards_html,
     render_monitor_html,
     manager,
+    get_bank_api_last,
 )
 
 router = APIRouter()
@@ -96,6 +97,7 @@ async def monitor_ws(websocket: WebSocket):
             "banks": data["banks"],
             "bases": data["bases"],
             "cards_html": render_cards_html(data),
+            "bank_api": get_bank_api_last(),
         }
         await websocket.send_json(initial)
         

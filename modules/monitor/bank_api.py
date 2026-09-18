@@ -26,12 +26,12 @@ from modules.logger_config import logger
 #                   НАСТРОЙКИ
 # ============================================================
 
-HEALTHCHECK_INTERVAL = 300
-HEALTHCHECK_JITTER = 60
+HEALTHCHECK_INTERVAL = 60
+HEALTHCHECK_JITTER = 15
 HEALTHCHECK_TIMEOUT = 5.0
 
 BACKOFF_MAP = {
-    0: 300,
+    0: 60,
     3: 600,
     5: 1800,
 }

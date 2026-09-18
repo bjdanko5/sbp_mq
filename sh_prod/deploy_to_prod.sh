@@ -155,6 +155,24 @@ git push origin main
 echo -e "${GREEN}✅ Merge выполнен${NC}"
 
 # ============================================================
+# УСТАНОВКА ЗАВИСИМОСТЕЙ (pip install)
+# ============================================================
+
+cd "$PROD_DIR"
+echo ""
+echo -e "${YELLOW}📦 Установка зависимостей (requirements.txt)...${NC}"
+
+if [ ! -d ".venv" ]; then
+    echo -e "${RED}❌ .venv не найден в $PROD_DIR${NC}"
+    exit 1
+fi
+
+source .venv/bin/activate
+pip install -r requirements.txt --quiet 2>&1 | tail -3
+deactivate
+echo -e "${GREEN}✅ Зависимости установлены${NC}"
+
+# ============================================================
 # ПЕРЕЗАПУСК PROD
 # ============================================================
 

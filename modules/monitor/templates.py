@@ -447,31 +447,57 @@ def render_monitor_html() -> str:
     </div>
     
     <script>
-        const REFRESH_INTERVAL = 2000;
+        // WebSocket для realtime-обновлений
+        let ws = null;
+        let reconnectDelay = 3000;
         
-        async function updateData() {
-            try {
-                const resp = await fetch('/monitor/data');
-                const data = await resp.json();
-                
-                document.getElementById('processing-count').textContent = data.processing_count;
-                document.getElementById('completed-count').textContent = data.completed_count;
-                document.getElementById('banks-count').textContent = data.banks.length;
-                document.getElementById('bases-count').textContent = data.bases.length;
-                document.getElementById('update-time').textContent = new Date().toLocaleTimeString();
-                
-                updateFilterOptions('filter-bank', data.banks, 'Все банки');
-                updateFilterOptions('filter-base', data.bases, 'Все базы');
-                
-                const cardsResp = await fetch('/monitor/cards');
-                const cardsHtml = await cardsResp.text();
-                document.getElementById('cards-container').innerHTML = cardsHtml;
-                
-                applyFilters();
-            } catch (e) {
-                console.error('Ошибка обновления:', e);
-                document.getElementById('status-text').textContent = '⚠️ Ошибка';
-            }
+        function connectWS() {
+            ws = new WebSocket(`ws://${location.host}/ws/monitor`);
+            
+            ws.onopen = () => {
+                console.log('✅ WS подключён');
+                reconnectDelay = 3000;
+                document.getElementById('status-text').textContent = 'WS: подключено';
+            };
+            
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    renderData(data);
+                } catch (e) {
+                    console.error('Ошибка парсинга WS:', e);
+                }
+            };
+            
+            ws.onclose = () => {
+                console.log(`⚠️ WS закрыт, переподключение через ${reconnectDelay}ms`);
+                document.getElementById('status-text').textContent = 'WS: переподключение...';
+                setTimeout(connectWS, reconnectDelay);
+                reconnectDelay = Math.min(reconnectDelay * 1.5, 30000);
+            };
+            
+            ws.onerror = (err) => {
+                console.error('WS ошибка:', err);
+                document.getElementById('status-text').textContent = 'WS: ошибка';
+            };
+        }
+        
+        function renderData(data) {
+            // Счётчики
+            document.getElementById('processing-count').textContent = data.processing_count;
+            document.getElementById('completed-count').textContent = data.completed_count;
+            document.getElementById('banks-count').textContent = data.banks.length;
+            document.getElementById('bases-count').textContent = data.bases.length;
+            document.getElementById('update-time').textContent = new Date(data.timestamp).toLocaleTimeString();
+            
+            // Фильтры
+            updateFilterOptions('filter-bank', data.banks, 'Все банки');
+            updateFilterOptions('filter-base', data.bases, 'Все базы');
+            
+            // Карточки (HTML от сервера)
+            document.getElementById('cards-container').innerHTML = data.cards_html;
+            
+            applyFilters();
         }
         
         function updateFilterOptions(selectId, values, placeholder) {
@@ -516,7 +542,7 @@ def render_monitor_html() -> str:
             
             document.getElementById('status-text').textContent = 
                 visibleCount > 0 
-                    ? `Показано: ${visibleCount} (авто: 2 сек)` 
+                    ? `Показано: ${visibleCount} (WS)` 
                     : 'Нет задач по фильтру';
         }
         
@@ -569,8 +595,8 @@ def render_monitor_html() -> str:
         document.getElementById('filter-base').addEventListener('change', applyFilters);
         document.getElementById('filter-status').addEventListener('change', applyFilters);
         
-        updateData();
-        setInterval(updateData, REFRESH_INTERVAL);
+        // Запуск WebSocket
+        connectWS();
     </script>
 </body>
 </html>

@@ -11,6 +11,7 @@ from fastapi import WebSocket
 
 from modules.logger_config import logger
 from .data import get_monitor_data
+from .render import render_cards_html
 
 
 class ConnectionManager:
@@ -77,7 +78,15 @@ async def monitor_poller(stop_event: asyncio.Event) -> None:
             current_hash = json.dumps(data_for_hash, sort_keys=True, default=str)
             
             if current_hash != last_hash:
-                await manager.broadcast(data)
+                payload = {
+                    "timestamp": data["timestamp"],
+                    "processing_count": len(data["processing"]),
+                    "completed_count": len(data["completed"]),
+                    "banks": data["banks"],
+                    "bases": data["bases"],
+                    "cards_html": render_cards_html(data),
+                }
+                await manager.broadcast(payload)
                 last_hash = current_hash
                 
                 if manager.count > 0:

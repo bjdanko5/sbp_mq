@@ -87,8 +87,16 @@ async def monitor_ws(websocket: WebSocket):
     await manager.connect(websocket)
     
     try:
-        # Отправляем текущее состояние сразу
-        initial = await get_monitor_data()
+        # Отправляем текущее состояние сразу (с HTML-карточками)
+        data = await get_monitor_data()
+        initial = {
+            "timestamp": data["timestamp"],
+            "processing_count": len(data["processing"]),
+            "completed_count": len(data["completed"]),
+            "banks": data["banks"],
+            "bases": data["bases"],
+            "cards_html": render_cards_html(data),
+        }
         await websocket.send_json(initial)
         
         # Держим соединение: ждём сообщений/закрытия

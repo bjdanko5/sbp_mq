@@ -81,6 +81,9 @@ async def health_detailed():
 
     # === Monitor WebSocket ===
     result["components"]["monitor_ws"] = _check_monitor_ws()
+    
+    # === Bank API ===
+    result["components"]["bank_api"] = _check_bank_api()
 
     # === Общий статус ===
     for comp_name, comp_data in result["components"].items():
@@ -237,6 +240,36 @@ def _check_monitor_ws() -> dict:
         return {
             "status": "ok",
             "connections": manager.count,
+        }
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
+def _check_bank_api() -> dict:
+    """Проверка TCP-доступности банков (bank_api_poller)."""
+    try:
+        from modules.monitor import bank_api_state
+        
+        state = bank_api_state.get_status()
+        banks = state.get("last_result") or {}
+        
+        banks_summary = {}
+        for bank, info in banks.items():
+            banks_summary[bank] = {
+                "available": info.get("available"),
+                "latency_ms": info.get("latency_ms"),
+                "host": info.get("host"),
+                "port": info.get("port"),
+                "error": info.get("error"),
+                "error_type": info.get("error_type"),
+            }
+        
+        return {
+            "status": "ok",
+            "consecutive_errors": state.get("consecutive_errors", 0),
+            "last_check": state.get("last_check"),
+            "next_interval": state.get("next_interval"),
+            "banks": banks_summary,
         }
     except Exception as e:
         return {"status": "error", "error": str(e)}

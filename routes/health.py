@@ -79,6 +79,9 @@ async def health_detailed():
     # === CallbackStats ===
     result["components"]["callback_stats"] = await _check_callback_stats()
 
+    # === Monitor WebSocket ===
+    result["components"]["monitor_ws"] = _check_monitor_ws()
+
     # === Общий статус ===
     for comp_name, comp_data in result["components"].items():
         if comp_data.get("status") == "error":
@@ -222,6 +225,23 @@ async def _check_callback_stats() -> dict:
     except Exception as e:
         return {"status": "error", "error": str(e)}
     
+# ============================================================
+#                   MONITOR WEBSOCKET
+# ============================================================
+
+def _check_monitor_ws() -> dict:
+    """Проверка WebSocket-подключений мониторинга."""
+    try:
+        from modules.monitor import manager
+        
+        return {
+            "status": "ok",
+            "connections": manager.count,
+        }
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
 # ============================================================
 #                   УТИЛИТЫ
 # ============================================================

@@ -5,6 +5,8 @@ WebSocket-менеджер + фоновый poller для мониторинга
 
 import asyncio
 import json
+import random
+from datetime import datetime
 from typing import Set
 
 from fastapi import WebSocket
@@ -12,6 +14,7 @@ from fastapi import WebSocket
 from modules.logger_config import logger
 from .data import get_monitor_data
 from .render import render_cards_html
+from .bank_api import check_all_banks, BankApiHealthState
 
 
 class ConnectionManager:
@@ -106,3 +109,57 @@ async def monitor_poller(stop_event: asyncio.Event) -> None:
             pass
     
     logger.info("[WS] Poller остановлен")
+
+# ============================================================
+#                   BANK API POLLER (TCP)
+# ============================================================
+# Отдельная задача: TCP-проверка банков с backoff.
+# Минимальная нагрузка: 1 SYN каждые 5 мин.
+
+bank_api_state = BankApiHealthState()
+bank_api_last: dict = {}
+
+
+async def bank_api_poller(stop_event: asyncio.Event) -> None:
+    """TCP-проверка банков с backoff."""
+    global bank_api_last
+    
+    logger.info("[BankAPI] Poller запущен")
+    
+    # Стартовый jitter
+    initial_delay = random.uniform(5, 30)
+    try:
+        await asyncio.wait_for(stop_event.wait(), timeout=initial_delay)
+        return
+    except asyncio.TimeoutError:
+        pass
+    
+    while not stop_event.is_set():
+        try:
+            result = await check_all_banks()
+            bank_api_state.record(result)
+            
+            new_hash = json.dumps(result, sort_keys=True, default=str)
+            old_hash = json.dumps(bank_api_last, sort_keys=True, default=str)
+            
+            if new_hash != old_hash:
+                bank_api_last = result
+                await manager.broadcast({
+                    "timestamp": datetime.now().isoformat(),
+                    "bank_api": result,
+                })
+                logger.info(f"[BankAPI] Broadcast: {list(result.keys())}")
+        except Exception as e:
+            logger.error(f"[BankAPI] Ошибка: {e}", exc_info=True)
+        
+        interval = bank_api_state.get_next_interval()
+        logger.debug(f"[BankAPI] Next check через {interval}s")
+        
+        try:
+            await asyncio.wait_for(stop_event.wait(), timeout=interval)
+            break
+        except asyncio.TimeoutError:
+            pass
+    
+    logger.info("[BankAPI] Poller остановлен")
+

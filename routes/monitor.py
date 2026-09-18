@@ -21,6 +21,7 @@ import config
 from modules.mq_client import mq_client
 from modules.callback_stats import callback_stats
 from modules.logger_config import logger
+from modules.monitor import get_monitor_data
 
 router = APIRouter()
 
@@ -29,124 +30,6 @@ router = APIRouter()
 # ============================================================
 
 COMPLETED_TTL_MINUTES = 5  # Показывать завершённые за последние 5 минут
-
-
-# ============================================================
-#                   ДАННЫЕ
-# ============================================================
-
-async def get_all_tasks() -> dict:
-    """
-    Получает все активные и недавно завершённые задачи из Redis.
-    
-    Returns:
-        dict: {
-            "processing": [...],  # задачи в обработке (progress)
-            "completed": [...],    # завершённые за последние N минут (task)
-            "banks": [...],        # список банков
-            "bases": [...],        # список баз
-        }
-    """
-    redis_client = mq_client.redis_client
-    if redis_client is None:
-        return {"processing": [], "completed": [], "banks": [], "bases": []}
-    
-    processing = []
-    completed = []
-    banks = set()
-    bases = set()
-    
-    # Отсечка по времени
-    cutoff = datetime.now() - timedelta(minutes=COMPLETED_TTL_MINUTES)
-    
-    # === Прогрессы (в обработке) ===
-    progress_keys = await redis_client.keys("progress:*")
-    for key in progress_keys:
-        key_str = str(key)
-        data = await redis_client.get(key_str)
-        if data:
-            try:
-                progress = json.loads(str(data))
-                task_id = key_str.replace("progress:", "")
-                progress['task_id'] = task_id
-                progress['_type'] = 'processing'
-                processing.append(progress)
-                
-                if progress.get('bank'):
-                    banks.add(progress['bank'])
-                if progress.get('base'):
-                    bases.add(progress['base'])
-            except json.JSONDecodeError:
-                pass
-    
-    # === Результаты (завершённые за последние N минут) ===
-    task_keys = await redis_client.keys("task:*")
-    for key in task_keys:
-        key_str = str(key)
-        data = await redis_client.get(key_str)
-        if data:
-            try:
-                result = json.loads(str(data))
-                
-                # Фильтр по времени: показываем только свежие
-                finished_str = result.get('finished_at')
-                if finished_str:
-                    try:
-                        finished_dt = datetime.fromisoformat(finished_str)
-                        if finished_dt < cutoff:
-                            continue
-                    except (ValueError, TypeError):
-                        pass
-                
-                task_id = key_str.replace("task:", "")
-                
-                # Извлекаем сводку
-                summary = result.get('summary', {})
-                
-                completed.append({
-                    "task_id": task_id,
-                    "bank": result.get('bank'),
-                    "base": result.get('base'),
-                    "job_id": result.get('job_id'),
-                    "job_name": result.get('job_name'),
-                    "status": result.get('status'),
-                    "started_at": result.get('started_at'),
-                    "finished_at": result.get('finished_at'),
-                    "summary": summary,
-                    "_type": 'completed',
-                })
-                
-                if result.get('bank'):
-                    banks.add(result['bank'])
-                if result.get('base'):
-                    bases.add(result['base'])
-            except json.JSONDecodeError:
-                pass
-    
-    # === Обогащаем callback-статистикой ===
-    # Для каждого Job читаем callback:count и callback:last_error
-    for job in processing + completed:
-        bank = job.get('bank')
-        base = job.get('base')
-        job_id = job.get('job_id')
-        
-        if bank and base and job_id is not None:
-            job['callback_count'] = await callback_stats.get_count(bank, base, job_id)
-            job['callback_last_error'] = await callback_stats.get_last_error(bank, base, job_id)
-        else:
-            job['callback_count'] = 0
-            job['callback_last_error'] = None
-    
-    # === Сортируем: свежие сверху ===
-    processing.sort(key=lambda x: x.get('started_at', ''), reverse=True)
-    completed.sort(key=lambda x: x.get('finished_at', ''), reverse=True)
-    
-    return {
-        "processing": processing,
-        "completed": completed,
-        "banks": sorted(list(banks)),
-        "bases": sorted(list(bases)),
-    }
 
 
 # ============================================================
@@ -334,7 +217,7 @@ async def monitor_dashboard():
 @router.get("/monitor/data")
 async def monitor_data():
     """API для получения данных мониторинга (JSON)."""
-    data = await get_all_tasks()
+    data = await get_monitor_data()
     return {
         "timestamp": datetime.now().isoformat(),
         "processing_count": len(data['processing']),
@@ -349,7 +232,7 @@ async def monitor_data():
 @router.get("/monitor/cards", response_class=HTMLResponse)
 async def monitor_cards():
     """HTML с карточками (для автообновления)."""
-    data = await get_all_tasks()
+    data = await get_monitor_data()
     
     processing_cards = ''.join([render_progress_card(j) for j in data['processing']])
     completed_cards = ''.join([render_completed_card(j) for j in data['completed']])

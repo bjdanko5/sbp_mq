@@ -11,7 +11,7 @@
 - Копирование task_id в буфер обмена
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from typing import Optional
 from datetime import datetime, timedelta
@@ -25,6 +25,7 @@ from modules.monitor import (
     get_monitor_data,
     render_cards_html,
     render_monitor_html,
+    manager,
 )
 
 router = APIRouter()
@@ -68,4 +69,34 @@ async def monitor_cards():
     html = render_cards_html(data)
     return HTMLResponse(content=html)
 
+# ============================================================
+#                   WEBSOCKET — realtime
+# ============================================================
 
+@router.websocket("/ws/monitor")
+async def monitor_ws(websocket: WebSocket):
+    """
+    WebSocket для realtime-обновлений мониторинга.
+    
+    Логика:
+    1. Принять соединение
+    2. Отправить initial данные
+    3. Держать соединение, ждать сообщений (или disconnect)
+    4. При disconnect — отписаться от manager
+    """
+    await manager.connect(websocket)
+    
+    try:
+        # Отправляем текущее состояние сразу
+        initial = await get_monitor_data()
+        await websocket.send_json(initial)
+        
+        # Держим соединение: ждём сообщений/закрытия
+        while True:
+            await websocket.receive_text()
+            
+    except WebSocketDisconnect:
+        await manager.disconnect(websocket)
+    except Exception as e:
+        logger.error(f"[WS] Ошибка в /ws/monitor: {e}", exc_info=True)
+        await manager.disconnect(websocket)

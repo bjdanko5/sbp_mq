@@ -11,6 +11,7 @@ from .render import (
     COMPLETED_TTL_MINUTES,
 )
 from .templates import render_monitor_html
+from .ws import ConnectionManager, monitor_poller, manager
 
 __all__ = [
     "get_monitor_data",
@@ -21,4 +22,7 @@ __all__ = [
     "render_cards_html",
     "COMPLETED_TTL_MINUTES",
     "render_monitor_html",
+    "ConnectionManager",
+    "monitor_poller",
+    "manager",
 ]

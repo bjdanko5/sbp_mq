@@ -115,6 +115,34 @@ def render_progress_card(job: dict) -> str:
     '''
 
 
+def _collect_job_error(job: dict) -> str:
+    """
+    Собирает текст ошибки из job.
+    
+    1. job["error"] — если есть
+    2. files[].error — с именем файла
+    3. "" — если ничего
+    """
+    errors = []
+    
+    general = job.get("error")
+    if general:
+        errors.append(str(general))
+    
+    for f in job.get("files", []):
+        if f.get("error"):
+            filename = f.get("filename", "unknown")
+            errors.append(f"{filename}: {f['error']}")
+    
+    if not errors:
+        return ""
+    
+    text = " | ".join(errors)
+    if len(text) > 300:
+        text = text[:297] + "..."
+    return text
+
+
 def render_completed_card(job: dict) -> str:
     """Карточка завершённой задачи."""
     task_id = job.get('task_id', '')
@@ -132,6 +160,10 @@ def render_completed_card(job: dict) -> str:
     finished_short = finished[:19].replace('T', ' ') if finished else '—'
     callback_html = render_callback_html(callback_count, callback_last_error)
     
+    # ✅ Собираем ошибку
+    error_text = _collect_job_error(job)
+    error_html = f'<div class="card-error">❌ {error_text}</div>' if error_text else ''
+    
     return f'''
     <div class="card {status}" data-bank="{bank}" data-base="{base}" data-status="{status}">
         <div class="card-header">
@@ -147,6 +179,7 @@ def render_completed_card(job: dict) -> str:
             <span title="Ошибок" class="errors">❌ {summary.get('error_requests', 0)}</span>
         </div>
         {callback_html}
+        {error_html}
         <div class="card-footer">
             <div class="task-id-block">
                 <span class="task-id-label">🔑</span>

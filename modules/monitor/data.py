@@ -90,6 +90,8 @@ async def _load_completed(redis_client, cutoff, banks: set, bases: set) -> list:
                 "started_at": task.get('started_at'),
                 "finished_at": task.get('finished_at'),
                 "summary": task.get('summary', {}),
+                "error": task.get('error'),
+                "files": task.get('files', []),
                 "_type": 'completed',
             })
             if task.get('bank'):

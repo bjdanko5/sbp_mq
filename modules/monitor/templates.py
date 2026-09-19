@@ -300,6 +300,18 @@ def render_monitor_html() -> str:
             font-size: 11px;
         }
         
+        .card-error {
+            font-size: 12px;
+            color: #c62828;
+            margin-bottom: 8px;
+            padding: 6px 10px;
+            background: #ffebee;
+            border-radius: 6px;
+            border-left: 3px solid #c62828;
+            word-break: break-word;
+            line-height: 1.4;
+        }
+        
         .card-footer {
             display: flex;
             flex-direction: column;

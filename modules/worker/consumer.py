@@ -95,6 +95,11 @@ class MessageConsumer:
                 # ✅ УДАЛЯЕМ прогресс (задача завершена)
                 await mq_client.delete_progress(task_id)
                 
+                # ✅ SOAP-уведомление 1С — ТОЛЬКО при ошибке
+                if result.get("status") != "completed":
+                    from modules.soap_notify import notify_job_error
+                    await notify_job_error(bank, base, job_id, result)
+                
                 elapsed = time.time() - start_time
                 summary = result.get('summary', {})
                 

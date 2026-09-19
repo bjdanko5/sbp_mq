@@ -155,22 +155,43 @@ git push origin main
 echo -e "${GREEN}✅ Merge выполнен${NC}"
 
 # ============================================================
-# УСТАНОВКА ЗАВИСИМОСТЕЙ (pip install)
+# УСТАНОВКА ЗАВИСИМОСТЕЙ (только если requirements.txt изменился)
 # ============================================================
 
 cd "$PROD_DIR"
 echo ""
-echo -e "${YELLOW}📦 Установка зависимостей (requirements.txt)...${NC}"
 
-if [ ! -d ".venv" ]; then
-    echo -e "${RED}❌ .venv не найден в $PROD_DIR${NC}"
-    exit 1
+REQ_CHANGED=0
+if git diff HEAD@{1} HEAD --name-only 2>/dev/null | grep -q "requirements.txt"; then
+    REQ_CHANGED=1
 fi
 
-source .venv/bin/activate
-pip install -r requirements.txt --quiet 2>&1 | tail -3
-deactivate
-echo -e "${GREEN}✅ Зависимости установлены${NC}"
+if [ "$REQ_CHANGED" -eq 0 ]; then
+    echo -e "${GREEN}✅ requirements.txt не менялся — pip install пропущен${NC}"
+else
+    echo -e "${YELLOW}📦 requirements.txt изменился — установка зависимостей...${NC}"
+
+    if [ ! -d ".venv" ]; then
+        echo -e "${RED}❌ .venv не найден в $PROD_DIR${NC}"
+        exit 1
+    fi
+
+    source .venv/bin/activate
+
+    timeout 120 pip install -r requirements.txt --quiet 2>&1 | tail -3
+    PIP_EXIT=${PIPESTATUS[0]}
+
+    deactivate
+
+    if [ "$PIP_EXIT" -eq 124 ]; then
+        echo -e "${RED}⚠️  pip install timeout (120s) — пропущен${NC}"
+        echo -e "${YELLOW}   Проверьте сеть и повторите: cd $PROD_DIR && pip install -r requirements.txt${NC}"
+    elif [ "$PIP_EXIT" -ne 0 ]; then
+        echo -e "${RED}❌ pip install завершился с ошибкой (код $PIP_EXIT)${NC}"
+    else
+        echo -e "${GREEN}✅ Зависимости установлены${NC}"
+    fi
+fi
 
 # ============================================================
 # ПЕРЕЗАПУСК PROD

@@ -35,7 +35,8 @@ PAGE = """<!DOCTYPE html>
   main th, main td {{ border: 1px solid var(--border); padding: 8px 10px; text-align: left; }}
   main th {{ background: #1a1f2a; }}
   main blockquote {{ border-left: 3px solid var(--accent); margin: 12px 0; padding: 4px 14px; color: var(--muted); }}
-  .mermaid {{ background: #1a1f2a; border-radius: 8px; padding: 16px; margin: 16px 0; text-align: center; }}
+  .mermaid {{ background: #1a1f2a; border-radius: 8px; padding: 16px; margin: 16px 0; text-align: center; overflow-x: auto; }}
+  .mermaid svg {{ max-width: 100%; height: auto; }}
   details {{ background: #1a1f2a; border-radius: 8px; padding: 8px 14px; margin: 12px 0; }}
   summary {{ cursor: pointer; color: var(--muted); }}
   .topbar {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }}
@@ -61,11 +62,34 @@ PAGE = """<!DOCTYPE html>
 
 <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 <script>
-  mermaid.initialize({{
-    startOnLoad: true,
-    theme: 'dark',
-    themeVariables: {{ primaryColor: '#4ea1ff' }}
-  }});
+  // markdown-it-py рендерит ```mermaid как <pre><code class="language-mermaid">.
+  // Mermaid v10 при startOnLoad:true подхватывает ТОЛЬКО .mermaid,
+  // поэтому конвертим <pre><code class="language-mermaid"> → <div class="mermaid">,
+  // затем запускаем mermaid.run() вручную.
+  (function () {{
+    if (typeof mermaid === 'undefined') {{
+      console.warn('[docs] mermaid.min.js не загрузился — проверь CDN / сеть');
+      return;
+    }}
+
+    mermaid.initialize({{
+      startOnLoad: false,
+      theme: 'dark',
+      themeVariables: {{ primaryColor: '#4ea1ff' }},
+      securityLevel: 'loose'
+    }});
+
+    document.querySelectorAll('pre > code.language-mermaid').forEach(function (el) {{
+      var div = document.createElement('div');
+      div.className = 'mermaid';
+      div.textContent = el.textContent;
+      el.parentElement.replaceWith(div);
+    }});
+
+    mermaid.run({{ querySelector: '.mermaid' }}).catch(function (err) {{
+      console.error('[docs] mermaid.run error:', err);
+    }});
+  }})();
 </script>
 </body>
 </html>

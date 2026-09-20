@@ -13,6 +13,7 @@ from routes.callback import router as callback_router
 from routes.stats import router as stats_router
 from routes.mockapi import router as mockapi_router
 from routes.monitor import router as monitor_router
+from routes.docs import router as docs_router
 
 
 def register_routes(app: FastAPI):
@@ -29,3 +30,4 @@ def register_routes(app: FastAPI):
     app.include_router(stats_router)
     app.include_router(mockapi_router, prefix="/mockapi")
     app.include_router(monitor_router)
+    app.include_router(docs_router)

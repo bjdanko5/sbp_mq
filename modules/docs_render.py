@@ -1,6 +1,11 @@
 """
 Рендер Markdown-документации из docs/ в HTML.
 Единый источник — файлы docs/*.md (те же, что в репозитории).
+
+Особенности:
+- Принимает name как с расширением .md, так и без — чтобы ссылки
+  в .md-файлах ([x](x.md)) работали и на GitHub, и в /project-docs.
+- Защита от path traversal (выход за пределы docs/).
 """
 from __future__ import annotations
 
@@ -32,7 +37,7 @@ def list_docs() -> list[dict]:
         title = _extract_title(p) or rel.as_posix()
         items.append(
             {
-                "name": rel.as_posix(),
+                "name": rel.as_posix(),      # напр. "architecture" или "modules/monitor"
                 "title": title,
                 "path": p,
             }
@@ -57,8 +62,17 @@ def render_doc(name: str) -> Optional[dict]:
     Рендерит docs/<name>.md в HTML.
     Возвращает dict {title, html, name} или None, если файл не найден
     или выходит за пределы docs/.
+
+    Принимает name как с расширением .md, так и без — чтобы ссылки
+    в .md-файлах работали и на GitHub (относительные), и в /project-docs.
     """
+    # Защита от path traversal
     safe = name.strip().lstrip("/").replace("..", "")
+
+    # Срезаем .md, если есть — чтобы [x](x.md) работало в обоих контекстах
+    if safe.endswith(".md"):
+        safe = safe[:-3]
+
     candidate = (DOCS_DIR / f"{safe}.md").resolve()
 
     try:

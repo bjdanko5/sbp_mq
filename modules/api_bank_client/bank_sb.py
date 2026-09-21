@@ -17,7 +17,7 @@ from .base import BaseBankClient
 
 class BankSB(BaseBankClient):
     """Клиент для банка Сбербанк."""
-    
+
     def __init__(self):
         super().__init__("sb")
         self.callback_url = config.CALLBACK_URLS.get("sb", "/callback_sb")
@@ -27,12 +27,17 @@ class BankSB(BaseBankClient):
             "Accept": "application/json",
             "User-Agent": "SBP-Service/1.0"
         }
-    
-    async def send_request(self, data: Union[Dict[str, Any], list]) -> Tuple[Optional[httpx.Response], Optional[Dict[str, Any]]]:
+
+    async def send_request(
+        self,
+        data: Union[Dict[str, Any], list],
+        context: Optional[str] = None,
+    ) -> Tuple[Optional[httpx.Response], Optional[Dict[str, Any]]]:
         """Отправляет запрос в API Сбербанка."""
         client = await self._get_client()
         url = self._build_url()
-        
+        ctx = f" ({context})" if context else ""
+
         try:
             start = time.time()
             response = await client.post(
@@ -42,36 +47,38 @@ class BankSB(BaseBankClient):
                 timeout=self.timeout
             )
             elapsed = time.time() - start
-            logger.debug(f"API банка SB POST {url} выполнен за {elapsed:.2f} сек")
+            logger.debug(f"API банка SB POST {url} выполнен за {elapsed:.2f} сек{ctx}")
             return response, None
-            
+
         except httpx.TimeoutException as e:
-            log_error_with_context(e, f"API банка {self.bank_name} timeout")
+            log_error_with_context(e, f"API банка {self.bank_name} timeout{ctx}")
             return None, create_response(
                 status=config.STATUS["API_TIMEOUT"],
                 error=str(e),
+                context=context,
                 data={"bank": self.bank_name}
             )
         except httpx.ConnectError as e:
-            log_error_with_context(e, f"API банка {self.bank_name} connect error")
+            log_error_with_context(e, f"API банка {self.bank_name} connect error{ctx}")
             return None, create_response(
                 status=config.STATUS["API_CONNECTION_ERROR"],
                 error=str(e),
+                context=context,
                 data={"bank": self.bank_name}
             )
         except Exception as e:
-            log_error_with_context(e, f"API банка {self.bank_name} error")
+            log_error_with_context(e, f"API банка {self.bank_name} error{ctx}")
             return None, create_response(
                 status=config.STATUS["API_ERROR"],
                 error=str(e),
+                context=context,
                 data={"bank": self.bank_name}
             )
-    
+
     def parse_response(self, response: httpx.Response) -> Dict[str, Any]:
         """Парсит ответ Сбербанка."""
         try:
             data = response.json() if response.content else None
-            # Сбербанк может возвращать словарь с полем "data" или список
             if isinstance(data, dict):
                 if "data" in data:
                     return {
@@ -97,6 +104,6 @@ class BankSB(BaseBankClient):
                 "error": str(e),
                 "status_code": response.status_code
             }
-    
+
     def get_callback_url(self) -> str:
         return self.callback_url

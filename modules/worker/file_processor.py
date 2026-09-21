@@ -11,7 +11,7 @@ from typing import Dict, Any, List, Optional
 import config
 from modules.logger_config import logger
 from modules import db
-from modules.api_bank_client import api_bank
+from modules.api_bank_client import create_bank_client
 from modules.request_storage import request_storage
 
 
@@ -125,18 +125,26 @@ class FileProcessor:
                         f"[Worker {worker_id}] Ошибка сохранения req:* в Redis: {e}"
                     )
             
-            # 5. Отправляем запрос в банк
+            # 5. Отправляем запрос в банк через factory
             try:
-                response, error = await api_bank.post(
-                    data=json_packet,
-                    context=processing_file.name
-                )
+                client = create_bank_client(bank)
+                try:
+                    response, error = await client.send_request(
+                        json_packet,
+                        context=processing_file.name,
+                    )
+                finally:
+                    await client.close()
+                
                 if error:
+                    # error — dict от create_response(); извлекаем текст
+                    err_text = error.get('error') if isinstance(error, dict) else str(error)
                     return {
                         'status': 'error',
                         'filename': file_path.name,
-                        'error': error
+                        'error': err_text or 'Unknown error'
                     }
+                
                 # ✅ Pylance: после проверки error response не None
                 if response is None:
                     return {

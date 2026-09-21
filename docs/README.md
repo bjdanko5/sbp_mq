@@ -143,9 +143,7 @@ curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8512/project-docs/modu
 | Модуль / файл | Проблема | Документ |
 |---------------|----------|----------|
 | `config.py` | Пароль SOAP в коде (не в `.env`) | [soap_integration.md](soap_integration.md#-безопасность) |
-| `worker/consumer.py` | `result.get('errors', 0)` — ключа нет | [modules/worker.md](modules/worker.md#-known-issues-todo) |
 | `worker/consumer.py` | Пустой `except:` глотает `KeyboardInterrupt` | [modules/worker.md](modules/worker.md#-known-issues-todo) |
-| `job_manager/file_operations.py` | `if not job_id:` — считает `0` пустым | [modules/job_manager.md](modules/job_manager.md#-known-issues-todo) |
 | `job_manager/search.py` | `find_jobs(base=...)` игнорирует base без bank | [modules/job_manager.md](modules/job_manager.md#-known-issues-todo) |
 | `worker/file_processor.py` | Использует legacy `api_bank` (только ci) | [modules/api_bank_client.md](modules/api_bank_client.md#-known-issues-todo) |
 | `routes/callback.py` | Нет `/callback_sb` и `/callback_vtb` | [modules/api_bank_client.md](modules/api_bank_client.md#-known-issues-todo) |

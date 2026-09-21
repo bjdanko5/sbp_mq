@@ -13,15 +13,14 @@
 
 ```
 modules/mq_client/
-├── __init__.py         25 строк   ← публичный API + глобальный экземпляр
-├── base.py            266 строк   ← MQClient (главный класс)
-├── publisher.py       150 строк   ← публикация в RabbitMQ
+├── __init__.py         23 строки  ← публичный API + глобальный экземпляр
+├── base.py            213 строк   ← MQClient (главный класс)
+├── publisher.py        80 строк   ← публикация Job в RabbitMQ
 ├── locker.py           91 строка  ← блокировка файлов через Redis
-├── result_storage.py  258 строк   ← результаты и прогресс в Redis
-└── utils.py            48 строк   ← генерация ID, валидация
+└── result_storage.py  258 строк   ← результаты и прогресс в Redis
 ```
 
-**Итого:** 838 строк, 6 файлов.
+**Итого:** 665 строк, 5 файлов.
 
 ---
 
@@ -99,7 +98,7 @@ self._result_storage = ResultStorage(self)
 
 | Прокси | Делегирует в |
 |--------|--------------|
-| `publish_task`, `publish_batch`, `publish_job` | `Publisher` |
+| `publish_job` | `Publisher` |
 | `lock_file`, `unlock_file`, `is_file_locked`, `is_file_processed`, `mark_processed` | `Locker` |
 | `save_result`, `get_result`, `delete_result` | `ResultStorage` |
 | `save_progress`, `get_progress`, `delete_progress` | `ResultStorage` |
@@ -124,41 +123,6 @@ mq_client = MQClient()
 
 Три метода публикации. Все — `DeliveryMode.PERSISTENT` (не теряются при рестарте
 RabbitMQ), `content_type="application/json"`, `ensure_ascii=False`.
-
-### `publish_task(base, file_path, task_id=None) → task_id`
-
-**Одна задача** = один файл. Генерирует `task_id`, если не задан:
-
-```python
-task_id = f"task_{datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:6]}"
-```
-
-**Message:**
-
-```json
-{
-  "task_id": "task_20260920193000_abc123",
-  "base": "zkh_ursv",
-  "file_name": "7845.json",
-  "file_path": "/sbp/mq_dev/jobs/ci/zkh_ursv/7845.json",
-  "created_at": "2026-09-20T19:30:00"
-}
-```
-
-⚠️ **Не используется** в текущем пайплайне (Job-модель победила).
-Оставлен для совместимости.
-
-### `publish_batch(base, file_paths, task_id=None) → task_id`
-
-**Пакет задач** — вызывает `publish_task` для каждого файла с **общим** `task_id`.
-
-```python
-task_id = f"batch_{...}"
-for file_path in file_paths:
-    await self.publish_task(base, file_path, task_id)
-```
-
-⚠️ **Не используется** сейчас.
 
 ### 🔥 `publish_job(job_data) → task_id`
 
@@ -234,8 +198,8 @@ await channel.default_exchange.publish(message, routing_key=config.RABBITMQ_QUEU
       await self.parent.locker.mark_processed(file_path, result)
       await self.parent.locker.unlock_file(file_path)
   ```
-- **`publish_task`** — **не блокирует** явно, но внешний код может вызвать
-  `lock_file` до публикации
+- **`lock_file`** — вызывается из `routes/create_payload_mq.py` перед публикацией Job
+  для защиты от дублирования (двойного запуска одного Job)
 
 ⚠️ **В текущем пайплайне `locker` почти не используется** — Job-модель
 гарантирует, что один Job уходит одному воркеру через `prefetch=1`.
@@ -311,20 +275,6 @@ sequenceDiagram
     CB->>RS: get_result(task_id)             [при callback]
     Note over RS: TTL — REDIS_TTL (3600 сек)
 ```
-
----
-
-## 🛠 `utils.py` — утилиты
-
-| Функция | Что делает |
-|---------|------------|
-| `generate_task_id(prefix="task")` | `f"{prefix}_{YYYYMMDDHHMMSS}_{uuid6}"` |
-| `generate_job_id()` | `generate_task_id("job")` |
-| `generate_batch_id()` | `generate_task_id("batch")` |
-| `validate_job_data(job_data)` | возвращает список отсутствующих полей из `['bank', 'base', 'job_id']` |
-
-⚠️ **В коде не используются** — `Publisher.publish_job` генерирует task_id
-**inline**. Утилиты оставлены как публичный API для внешних вызовов.
 
 ---
 
@@ -451,7 +401,6 @@ sudo journalctl -u sbp_mq-dev.service | grep "\[Redis\]"
 
 1. **`publisher.py`** — новый метод, например `publish_high_priority(job_data)`
 2. **`base.py`** — прокси-метод (для консистентности)
-3. **`utils.py`** — генератор ID, если нужен особый префикс
 
 ### Добавить новый тип ключа
 
@@ -466,32 +415,25 @@ sudo journalctl -u sbp_mq-dev.service | grep "\[Redis\]"
 - **`worker/consumer.py::process_message`** — подхватить новые поля
 - **`worker/job_processor.py::process_job`** — использовать
 
-### Удалить legacy
+### Чистка кода (сделано)
 
-Кандидаты на удаление:
-- `Publisher.publish_task`, `Publisher.publish_batch` — не используются (Job-модель)
-- `Locker` (весь) — не используется (prefetch=1 покрывает)
-- `utils.py` (`generate_task_id`, `validate_job_data`) — не используются
-- `MQClient` прокси-методы для этих методов
+В ходе рефакторинга **удалено**:
 
-⚠️ **Перед удалением** — `grep` по всему проекту:
+- ✅ `Publisher.publish_task`, `Publisher.publish_batch` — не использовались (Job-модель)
+- ✅ `utils.py` (весь файл) — не использовался
+- ✅ Прокси `publish_task`, `publish_batch` из `MQClient`
 
-```bash
-grep -rn "publish_task\|publish_batch\|lock_file\|generate_task_id\|validate_job_data" \
-    --include="*.py" . | grep -v ".venv"
-```
-
----
+**Оставлено** (используется):
+- `Locker` — **защита от дублирования** Job, используется в `routes/create_payload_mq.py`
+- `publish_job` — основной метод публикации
 
 ## 📋 Known issues (TODO)
 
 | # | Файл | Проблема | Приоритет |
 |---|------|----------|-----------|
-| 1 | `locker.py` | Ключи `lock:*` и `processed:*` содержат **полный путь** файла — длинные, плодят мусор | низкий |
-| 2 | `publisher.py` | `publish_task`, `publish_batch` — не используются с Job-моделью | низкий (удалить) |
-| 3 | `base.py` | Прокси-методы — рудимент | низкий (оставить для совместимости) |
-| 4 | `utils.py` | Не используется | низкий (удалить) |
-| 5 | `result_storage.py` | `save_result` неявно зависит от `locker` — если `locker is None`, тихо пропускает `mark_processed` | низкий |
+| 1 | `locker.py` | Ключи `lock:*` и `processed:*` содержат **полный путь** файла | низкий |
+| 2 | `base.py` | Прокси-методы — рудимент | низкий |
+| 3 | `result_storage.py` | `save_result` неявно зависит от `locker` | низкий |
 
 ---
 

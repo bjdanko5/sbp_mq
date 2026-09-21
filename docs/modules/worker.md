@@ -11,15 +11,14 @@
 
 ```
 modules/worker/
-├── __init__.py          27 строк   ← публичный API
-├── base.py             252 строки  ← класс Worker (главный)
+├── __init__.py          23 строки  ← публичный API
+├── base.py             220 строк   ← класс Worker (главный)
 ├── consumer.py         171 строка  ← MessageConsumer
 ├── job_processor.py    251 строка  ← обработка Job (последовательность файлов)
-├── file_processor.py   190 строк   ← обработка одного файла
-└── result_saver.py     115 строк   ← сохранение в Redis (legacy, см. ниже)
+└── file_processor.py   190 строк   ← обработка одного файла
 ```
 
-**Итого:** 1006 строк, 6 файлов.
+**Итого:** 855 строк, 5 файлов.
 **Точка входа:** `run_worker.py` (в корне проекта).
 
 ---
@@ -31,8 +30,6 @@ from .base import Worker
 from .consumer import MessageConsumer
 from .job_processor import JobProcessor
 from .file_processor import FileProcessor
-from .result_saver import ResultSaver
-
 worker = Worker()       # глобальный экземпляр для обратной совместимости
 ```
 
@@ -53,7 +50,7 @@ await worker.start()
 - Объявляет очередь (`durable=True`)
 - Устанавливает `prefetch_count=1` (по одной задаче за раз)
 - Запускает `consume_loop` (в фоне)
-- Держит дочерние подмодули (`consumer`, `job_processor`, `file_processor`, `result_saver`)
+- Держит дочерние подмодули (`consumer`, `job_processor`, `file_processor`)
 
 ### Инициализация
 
@@ -108,7 +105,6 @@ self.redis_db = config.REDIS_DB
 async def _process_message(self, message)         # → self._consumer.process_message
 async def _process_job(...)                        # → self._job_processor.process_job
 async def _process_file_for_bank(...)              # → self._file_processor.process_file
-async def _save_result(...), _save_error(...)      # → self._result_saver
 ```
 
 ⚠️ **Сейчас не используются** — воркер вызывает `self.parent.job_processor.process_job()`
@@ -347,47 +343,6 @@ async def process_job(...):
 | `saved_count` | если файл сохранён в SQLite |
 | `response` | если `DEBUG_VERBOSE` и HTTP 202 |
 | `error` | если ошибка |
-
----
-
-## 💾 `result_saver.py` — `ResultSaver`
-
-### Что делает
-
-Сохраняет результаты в Redis через **свой** `redis_client` воркера.
-
-### ⚠️ Статус: **legacy, дублирует `mq_client`**
-
-В текущем пайплайне `ResultSaver` **не используется** — `consumer.py` вызывает
-`mq_client.save_result(task_id, result)` (глобальный MQ-клиент), а не
-`self.parent.result_saver.save_result(...)`.
-
-`ResultSaver` остался с более ранней архитектуры. Методы:
-
-- `save_result(task_id, result)` — добавляет `result` в `task:{task_id}.files`,
-  пересчитывает статус (`processing` / `completed` / `error`)
-- `save_error(task_id, error)` — устанавливает `task:{task_id}.status = 'error'`,
-  пишет `error`
-- `_get_timestamp()` — ISO-время
-
-**Логика статуса:**
-
-```python
-if error_files > 0:
-    results['status'] = 'error'
-elif total_files > 0 and total_files == completed_files:
-    results['status'] = 'completed'
-else:
-    results['status'] = 'processing'
-```
-
-**TTL:** `config.REDIS_TTL` (по умолчанию 3600 сек).
-
-### Рекомендация
-
-- **Не использовать в новом коде** — брать `mq_client`
-- **Удалить** `result_saver.py` и `_result_saver` из `base.py` — **TODO**
-- **`_save_result` / `_save_error`** в `base.py` — тоже рудимент
 
 ---
 
@@ -631,12 +586,11 @@ redis-cli -n 1 get 'progress:job_...'
 
 | # | Файл | Проблема | Приоритет |
 |---|------|----------|-----------|
-| 1 | `consumer.py` | `result.get('errors', 0)` — ключа нет, всегда 0 в логе | низкий |
-| 2 | `consumer.py` | `if result.status != "completed"` вместо `== "error"` — сработает на `processing` | средний |
-| 3 | `consumer.py` | Пустой `except:` глотает `KeyboardInterrupt` | средний |
-| 4 | `run_worker.py` | Нет graceful shutdown по `SIGTERM` — systemd через 90 сек делает `SIGKILL` | низкий |
-| 5 | `result_saver.py` | Legacy, дублирует `mq_client`, не используется | низкий (удалить) |
-| 6 | `base.py` | Прокси-методы `_process_job` и др. — рудимент | низкий (удалить) |
+| 1 | `consumer.py` | `result.get('errors', 0)` — ключа нет | низкий |
+| 2 | `consumer.py` | `status != "completed"` вместо `== "error"` | средний |
+| 3 | `consumer.py` | Пустой `except:` | средний |
+| 4 | `run_worker.py` | Нет graceful shutdown по SIGTERM | низкий |
+| 5 | `base.py` | Прокси-методы — рудимент | низкий |
 
 ---
 

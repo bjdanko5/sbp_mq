@@ -125,14 +125,16 @@ class MessageConsumer:
                     )
                 else:
                     job_manager.move_to_error(bank, base, job_id)
-                    errors = result.get('errors', 0)
+                    error_files = summary.get('error_files', 0)
+                    error_requests = summary.get('error_requests', 0)
                     
                     # ✅ ДЕТАЛЬНЫЙ ЛОГ
                     logger.warning(
                         f"⚠️ [Worker {worker_id}] Job {bank}@{base}@{job_id} "
                         f"ЗАВЕРШЁН С ОШИБКАМИ за {elapsed:.2f} сек | "
-                        f"ошибок: {errors}, "
-                        f"файлов: {summary.get('processed_files', 0)}/{summary.get('total_files', 0)} | "
+                        f"файлов с ошибкой: {error_files}, "
+                        f"запросов с ошибкой: {error_requests}, "
+                        f"обработано файлов: {summary.get('processed_files', 0)}/{summary.get('total_files', 0)} | "
                         f"task_id: {task_id}"
                     )
                     
@@ -140,7 +142,8 @@ class MessageConsumer:
                     aggregated_logger.warning(
                         f"⚠️ [Worker {worker_id}] ОШИБКА Job "
                         f"{bank}@{base}@{job_id} за {elapsed:.2f} сек | "
-                        f"{errors} ошибок | детали: logs/{log_name}_errors.log"
+                        f"{error_files} файлов, {error_requests} запросов с ошибкой | "
+                        f"детали: logs/{log_name}_errors.log"
                     )
                 
             except json.JSONDecodeError as e:

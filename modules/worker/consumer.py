@@ -210,11 +210,28 @@ class MessageConsumer:
             
             except asyncio.CancelledError:
                 # ✅ CONTROLLED ABORT (SIGTERM)
+                
+                # Если abort до парсинга — нечего абортить, просто nack
+                if bank is None or base is None or job_id is None:
+                    logger.warning(
+                        f"⚠️ [Worker {worker_id}] ABORT до парсинга "
+                        f"сообщения — nack(requeue=False)"
+                    )
+                    try:
+                        await message.nack(requeue=False)
+                    except Exception as e:
+                        logger.error(
+                            f"❌ [Worker {worker_id}] Ошибка nack: {e}"
+                        )
+                    # ✅ Пробрасываем дальше — consume_loop должен выйти
+                    raise
+                
+                # ✅ После этой проверки bank/base/job_id — точно не None
                 await self._handle_abort(
                     message=message,
                     bank=bank, base=base, job_id=job_id,
-                    task_id=task_id,
-                    job_name=job_name,
+                    task_id=task_id if task_id is not None else '',
+                    job_name=job_name if job_name is not None else '',
                 )
                 # ✅ Пробрасываем дальше — consume_loop должен выйти
                 raise

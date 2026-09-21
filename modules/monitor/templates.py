@@ -66,6 +66,34 @@ def render_monitor_html() -> str:
             50% { opacity: 0.4; }
         }
         
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        
+        .header-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: #fff;
+            padding: 8px 14px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        
+        .header-btn:hover {
+            background: rgba(78, 161, 255, 0.25);
+            border-color: #4ea1ff;
+            transform: translateY(-1px);
+        }
+        
         .summary {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -421,9 +449,12 @@ def render_monitor_html() -> str:
                 <h1>📊 Мониторинг SBP</h1>
                 <div class="time">Обновление: <span id="update-time">—</span></div>
             </div>
-            <div class="header-status">
-                <span class="status-dot"></span>
-                <span id="status-text">WS: подключение...</span>
+            <div class="header-actions">
+                <a href="/project-docs" target="_blank" class="header-btn" title="Документация проекта">📖 Документация</a>
+                <div class="header-status">
+                    <span class="status-dot"></span>
+                    <span id="status-text">WS: подключение...</span>
+                </div>
             </div>
         </div>
         

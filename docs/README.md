@@ -4,7 +4,7 @@
 уведомлений СБП через RabbitMQ с мониторингом, SOAP-интеграцией с 1С
 и веб-дашбордом.
 
-> Актуально на коммит: `bd3b8a7` (ветки `dev` / `main` синхронизированы)
+> Актуально на коммит: `d9e672a` (ветки `dev` / `main` синхронизированы)
 
 ## 🌐 Просмотр
 
@@ -32,6 +32,7 @@
 | [monitoring.md](monitoring.md) | Мониторинг: WS, bank_api, `/health/detailed` |
 | [soap_integration.md](soap_integration.md) | SOAP-уведомления 1С (callback + ошибки Job) |
 | [git_workflow.md](git_workflow.md) | Worktree, ветки `dev`/`main`, push, SSH |
+| [pitfalls.md](pitfalls.md) | 🪤 **Грабли проекта** — неочевидные механизмы |
 
 ### 🧩 Модули (`modules/`)
 
@@ -59,25 +60,40 @@
 | [workflows/callback_flow.md](workflows/callback_flow.md) | Callback от банка → SOAP в 1С |
 | [workflows/error_handling.md](workflows/error_handling.md) | Обработка ошибок: статусы → действия |
 
+## 🪤 Грабли проекта
+
+**Неочевидные механизмы**, которые приводят к багам или потере времени:
+
+👉 **[docs/pitfalls.md](pitfalls.md)**
+
+Примеры:
+- `deploy.sh` сам рестартует воркеры (через `run_debug.sh`) — ручной рестарт **не нужен**
+- Pylance: `Optional[X]` в сигнатурах → early-return или `assert`
+- `move_to_error` **не снимает лок** в Redis
+- `time.sleep` в `async def` блокирует event loop (abort не сработает)
+- `soap_notify` 404 на WSDL в DEV — **ожидаемо** для тестовых баз (`zkh_ursv2`, `zkh_ursv3`)
+
+**Правило:** добавляй запись в `pitfalls.md` **в момент**, когда наступил на грабли.
+
 ## 🧭 С чего начать
 
 | Роль | Куда |
 |------|------|
-| **Новый разработчик** | [architecture.md](architecture.md) → [modules/](modules/) |
-| **Оператор / деплой** | [deployment.md](deployment.md) → [scripts/sh_prod.md](scripts/sh_prod.md) |
+| **Новый разработчик** | [architecture.md](architecture.md) → [modules/](modules/) → [pitfalls.md](pitfalls.md) |
+| **Оператор / деплой** | [deployment.md](deployment.md) → [scripts/sh_prod.md](scripts/sh_prod.md) → [pitfalls.md](pitfalls.md) |
 | **1С-разработчик** | [soap_integration.md](soap_integration.md) → [api.md](api.md#post-callback) |
 | **Интегратор API** | [api.md](api.md) → [workflows/](workflows/) |
-| **Дежурный** | [workflows/error_handling.md](workflows/error_handling.md) → [monitoring.md](monitoring.md) |
+| **Дежурный** | [workflows/error_handling.md](workflows/error_handling.md) → [monitoring.md](monitoring.md) → [pitfalls.md](pitfalls.md) |
 
 ## 📊 Сводка
 
 | Раздел | Файлов | Строк |
 |--------|--------|-------|
-| Основное | 7 | ~3 500 |
+| Основное | 8 | ~3 700 |
 | Модули | 5 | ~2 800 |
 | Скрипты | 3 | ~1 500 |
 | Сценарии | 3 | ~2 200 |
-| **Всего** | **18** | **~10 000** |
+| **Всего** | **19** | **~10 200** |
 
 ## 📌 Конвенции
 
@@ -107,43 +123,3 @@
 1. Создать файл в нужной подпапке `docs/`:
    ```bash
    nano docs/modules/new_module.md
-   ```
-2. **Первый заголовок `# Title`** — станет именем в навигации `/project-docs`
-3. **Ссылки между документами** — относительные: `[api.md](../api.md)`
-   - Работают и на GitHub, и в `/project-docs` (см. `render_doc` — срезает `.md`)
-4. **Mermaid** — блок ` ```mermaid `
-5. **Обновить этот файл** — добавить ссылку в нужную таблицу выше
-6. Коммит:
-   ```bash
-   git add docs/
-   git commit -m "docs: add new_module.md"
-   git push origin dev
-   ```
-
-### Как обновлять
-
-- **Правки в `docs/*.md`** — коммит в `dev`, уйдёт с ближайшим `./deploy.sh`
-- **Роут `/project-docs`** — сам подхватит новые `.md` (сканирует `docs/` через `rglob`)
-- **Навигация** — обновляется автоматически (список файлов)
-
-### Проверка рендера
-
-```bash
-# 1. Что новый файл в индексе
-curl -s http://localhost:8512/project-docs | grep '<название>'
-
-# 2. Что отдаёт 200
-curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8512/project-docs/modules/new_module
-```
-
-## 📋 Известные TODO в кодовой базе
-
-Отражены в разделах **Known issues** внутри соответствующих документов:
-
-| Модуль / файл | Проблема | Документ |
-|---------------|----------|----------|
-| `config.py` | Пароль SOAP в коде (не в `.env`) | [soap_integration.md](soap_integration.md#-безопасность) |
-| `worker/consumer.py` | Пустой `except:` глотает `KeyboardInterrupt` | [modules/worker.md](modules/worker.md#-known-issues-todo) |
-| `job_manager/search.py` | `find_jobs(base=...)` игнорирует base без bank | [modules/job_manager.md](modules/job_manager.md#-known-issues-todo) |
-| `worker/file_processor.py` | Использует legacy `api_bank` (только ci) | [modules/api_bank_client.md](modules/api_bank_client.md#-known-issues-todo) |
-| `sh_prod/restart_prod.sh` | `sleep 5` не ждёт старта | [scripts/sh_prod.md](scripts/sh_prod.md#-known-issues-todo) |

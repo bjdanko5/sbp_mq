@@ -171,5 +171,7 @@ class MessageConsumer:
                         data.get('base'),
                         data.get('job_id')
                     )
-                except:
-                    pass
+                except Exception as inner_e:
+                    logger.warning(
+                        f"[Worker {worker_id}] Не удалось переместить Job в error: {inner_e}"
+                    )

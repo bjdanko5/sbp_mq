@@ -7,7 +7,7 @@
 import aio_pika
 from aio_pika.abc import AbstractConnection, AbstractChannel
 import redis.asyncio as redis
-from typing import Optional, Dict, Any, List, Union
+from typing import Optional, Dict, Any
 
 import config
 from modules.logger_config import logger
@@ -18,7 +18,7 @@ class MQClient:
     Клиент для работы с Message Queue (RabbitMQ) и Redis.
     
     Поддерживает:
-    - Публикацию задач (publish_task, publish_batch, publish_job)
+    - Публикацию Job (publish_job)
     - Блокировку файлов (lock_file, unlock_file)
     - Сохранение результата (save_result)
     - Сохранение прогресса (save_progress)
@@ -145,18 +145,6 @@ class MQClient:
     # ============================================================
     #                     ПРОКСИ-МЕТОДЫ (обратная совместимость)
     # ============================================================
-    
-    async def publish_task(self, base: str, file_path, task_id: Optional[str] = None) -> str:
-        """Публикует одну задачу в очередь (обратная совместимость)."""
-        if self._publisher:
-            return await self._publisher.publish_task(base, file_path, task_id)
-        raise Exception("Publisher не инициализирован")
-    
-    async def publish_batch(self, base: str, file_paths, task_id: Optional[str] = None) -> str:
-        """Публикует пакет задач (обратная совместимость)."""
-        if self._publisher:
-            return await self._publisher.publish_batch(base, file_paths, task_id)
-        raise Exception("Publisher не инициализирован")
     
     async def publish_job(self, job_data: Dict[str, Any]) -> str:
         """Публикует Job (обратная совместимость)."""

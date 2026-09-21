@@ -21,11 +21,12 @@ class APIBankClient:
     """
 
     def __init__(self):
-        self.base_url = config.BANK_URLS.get("ci")
-        self.timeout = config.REQUEST_TIMEOUT
-        self.verify_ssl = config.VERIFY_SSL
-        self.default_headers = config.DEFAULT_HEADERS
-        self._client = None
+        # base_url может быть None, если ключа нет — приводим к str
+        self.base_url: str = config.BANK_URLS.get("ci") or ""
+        self.timeout: float = config.REQUEST_TIMEOUT
+        self.verify_ssl: bool = config.VERIFY_SSL
+        self.default_headers: Dict[str, str] = config.DEFAULT_HEADERS
+        self._client: Optional[httpx.AsyncClient] = None
 
     async def _get_client(self) -> httpx.AsyncClient:
         if self._client is None:
@@ -67,7 +68,7 @@ class APIBankClient:
 
     async def get(
         self,
-        data: Union[Dict[str, Any], list] = None,
+        data: Optional[Union[Dict[str, Any], list]] = None,
         endpoint: str = "",
         context: Optional[str] = None
     ) -> Tuple[Optional[httpx.Response], Optional[Dict[str, Any]]]:
@@ -83,10 +84,15 @@ class APIBankClient:
     ) -> Tuple[Optional[httpx.Response], Optional[Dict[str, Any]]]:
         """Универсальный метод для запросов (POST/PATCH/GET)."""
         client = await self._get_client()
-        url = f"{self.base_url}{endpoint}" if endpoint else self.base_url
 
-        # GET — без body, PATCH/POST — с json
-        kwargs = {"headers": self.default_headers, "timeout": self.timeout}
+        # base_url уже str (приведён в __init__)
+        url: str = f"{self.base_url}{endpoint}" if endpoint else self.base_url
+
+        # GET — без body, PATCH/POST — с json (если data есть)
+        kwargs: Dict[str, Any] = {
+            "headers": self.default_headers,
+            "timeout": self.timeout,
+        }
         if method != "GET" and data is not None:
             kwargs["json"] = data
 

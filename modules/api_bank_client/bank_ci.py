@@ -25,7 +25,7 @@ class BankCI(BaseBankClient):
         data: Union[Dict[str, Any], list],
         context: Optional[str] = None,
     ) -> Tuple[Optional[httpx.Response], Optional[Dict[str, Any]]]:
-        """Отправляет POST-запрос в API Центринвеста."""
+        """Отправляет POST-запрос в API Центринвеста (создание QR)."""
         client = await self._get_client()
         url = self._build_url()
         ctx = f" ({context})" if context else ""
@@ -43,7 +43,7 @@ class BankCI(BaseBankClient):
             return response, None
 
         except httpx.TimeoutException as e:
-            log_error_with_context(e, f"API банка {self.bank_name} timeout{ctx}")
+            log_error_with_context(e, f"API банка {self.bank_name} POST timeout{ctx}")
             return None, create_response(
                 status=config.STATUS["API_TIMEOUT"],
                 error=str(e),
@@ -51,7 +51,7 @@ class BankCI(BaseBankClient):
                 data={"bank": self.bank_name}
             )
         except httpx.ConnectError as e:
-            log_error_with_context(e, f"API банка {self.bank_name} connect error{ctx}")
+            log_error_with_context(e, f"API банка {self.bank_name} POST connect error{ctx}")
             return None, create_response(
                 status=config.STATUS["API_CONNECTION_ERROR"],
                 error=str(e),
@@ -59,7 +59,55 @@ class BankCI(BaseBankClient):
                 data={"bank": self.bank_name}
             )
         except Exception as e:
-            log_error_with_context(e, f"API банка {self.bank_name} error{ctx}")
+            log_error_with_context(e, f"API банка {self.bank_name} POST error{ctx}")
+            return None, create_response(
+                status=config.STATUS["API_ERROR"],
+                error=str(e),
+                context=context,
+                data={"bank": self.bank_name}
+            )
+
+    async def send_request_patch(
+        self,
+        data: Union[Dict[str, Any], list],
+        endpoint: str = "",
+        context: Optional[str] = None,
+    ) -> Tuple[Optional[httpx.Response], Optional[Dict[str, Any]]]:
+        """Отправляет PATCH-запрос в API Центринвеста (блокировка QR)."""
+        client = await self._get_client()
+        url = self._build_url(endpoint)
+        ctx = f" ({context})" if context else ""
+
+        try:
+            start = time.time()
+            response = await client.patch(
+                url,
+                json=data,
+                headers=self.headers,
+                timeout=self.timeout
+            )
+            elapsed = time.time() - start
+            logger.debug(f"API банка PATCH {url} выполнен за {elapsed:.2f} сек{ctx}")
+            return response, None
+
+        except httpx.TimeoutException as e:
+            log_error_with_context(e, f"API банка {self.bank_name} PATCH timeout{ctx}")
+            return None, create_response(
+                status=config.STATUS["API_TIMEOUT"],
+                error=str(e),
+                context=context,
+                data={"bank": self.bank_name}
+            )
+        except httpx.ConnectError as e:
+            log_error_with_context(e, f"API банка {self.bank_name} PATCH connect error{ctx}")
+            return None, create_response(
+                status=config.STATUS["API_CONNECTION_ERROR"],
+                error=str(e),
+                context=context,
+                data={"bank": self.bank_name}
+            )
+        except Exception as e:
+            log_error_with_context(e, f"API банка {self.bank_name} PATCH error{ctx}")
             return None, create_response(
                 status=config.STATUS["API_ERROR"],
                 error=str(e),

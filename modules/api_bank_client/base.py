@@ -17,7 +17,8 @@ class BaseBankClient(ABC):
     Базовый класс для всех банков.
 
     Каждый банк должен реализовать:
-    - send_request(data, context) — отправка запроса в API банка
+    - send_request(data, context) — POST-запрос (создание QR)
+    - send_request_patch(data, endpoint, context) — PATCH-запрос (блокировка QR)
     - parse_response(response) — парсинг ответа API банка
     - get_callback_url() — URL для callback
     """
@@ -64,10 +65,32 @@ class BaseBankClient(ABC):
         context: Optional[str] = None,
     ) -> Tuple[Optional[httpx.Response], Optional[Dict[str, Any]]]:
         """
-        Отправляет запрос в API банка.
+        Отправляет POST-запрос в API банка (создание QR).
 
         Args:
             data: Данные для отправки
+            context: Контекст для логов (обычно имя файла)
+
+        Returns:
+            Tuple[Optional[httpx.Response], Optional[Dict[str, Any]]]:
+                - (response, None) при успехе
+                - (None, error_response) при ошибке
+        """
+        pass
+
+    @abstractmethod
+    async def send_request_patch(
+        self,
+        data: Union[Dict[str, Any], list],
+        endpoint: str = "",
+        context: Optional[str] = None,
+    ) -> Tuple[Optional[httpx.Response], Optional[Dict[str, Any]]]:
+        """
+        Отправляет PATCH-запрос в API банка (блокировка QR).
+
+        Args:
+            data: Данные для отправки
+            endpoint: Дополнительный endpoint (обычно "/block")
             context: Контекст для логов (обычно имя файла)
 
         Returns:

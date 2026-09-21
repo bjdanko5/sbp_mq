@@ -197,9 +197,11 @@ curl -X DELETE "http://localhost:8512/create_payload_mq/jobs/clean?days=30"
 
 ---
 
-### `GET /stop_payload/{base}`
+### `GET /stop_payload/{base}` (legacy, bank=ci)
 
-Блокировка QR-кодов для базы.
+**Обратная совместимость** — старая технология. Банк `ci` жёстко.
+
+Сканирует **все** файлы `stop/*.json` в `/sbp/mq_dev/ci/{base}/stop/`.
 
 | Параметр | Тип | Описание |
 |----------|-----|----------|
@@ -208,6 +210,49 @@ curl -X DELETE "http://localhost:8512/create_payload_mq/jobs/clean?days=30"
 ```bash
 curl "http://localhost:8512/stop_payload/zkh_ursv"
 ```
+
+### `GET /stop_payload/{bank}/{base}/{job_id}` (мультибанк, mq)
+
+**Новая технология** (кодируется как `mq` в 1С). Банк явно из URL.
+
+Обрабатывает **один** файл `stop/{job_id}.json` через `create_bank_client(bank).send_request_patch()`.
+
+| Параметр | Тип | Описание |
+|----------|-----|----------|
+| `bank` | string (path) | Имя банка (`ci` / `sb` / `vtb`) |
+| `base` | string (path) | Имя базы |
+| `job_id` | integer (path) | ID Job (= `ПакетИД` в 1С) |
+
+```bash
+curl "http://localhost:8512/stop_payload/ci/zkh_ursv/123"
+```
+
+**Формат файла** `stop/{job_id}.json` (создаётся 1С):
+```json
+[{"requestId": "754316"}, {"requestId": "754317"}]
+```
+
+**Логика:**
+1. Валидация `bank` (иначе `CONFIG_ERROR`)
+2. Файл `{job_id}.json` ищется в `stop/`
+3. Если нет — проверяется `stoped/` → `FILE_NOT_FOUND`
+4. Фильтр `request_ids` — **только те, по которым НЕ пришёл callback** (`req:*` в Redis или `requests.db`)
+5. PATCH `/block` в банк
+6. При `202` — файл → `stoped/`
+
+**Ответ:**
+```json
+{
+  "status": "SUCCESS",
+  "data": {
+    "bank": "ci", "base": "zkh_ursv", "job_id": 123,
+    "filename": "123.json",
+    "total": 2, "blocked": 2, "skipped_callback": 0,
+    "status_code": 202
+  }
+}
+```
+
 
 ---
 
@@ -549,7 +594,8 @@ class PayloadItem(BaseModel):
 | GET | `/create_payload_mq/{bank}/{base}/{job_id}/status` | payload |
 | GET | `/create_payload_mq/jobs/pending` | payload |
 | DELETE | `/create_payload_mq/jobs/clean` | payload |
-| GET | `/stop_payload/{base}` | payload |
+| GET | `/stop_payload/{base}` | payload (legacy, ci) |
+| GET | `/stop_payload/{bank}/{base}/{job_id}` | payload (мультибанк) |
 | POST | `/callback` | callback (ci) |
 | POST | `/callback_sb` | callback (sb) |
 | POST | `/callback_vtb` | callback (vtb) |

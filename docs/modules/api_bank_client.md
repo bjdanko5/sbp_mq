@@ -125,7 +125,8 @@ self._is_closed = False
 
 | Метод | Что должен делать наследник |
 |-------|----------------------------|
-| `async send_request(data)` | POST в API банка, вернуть `(response, None)` / `(None, error_response)` |
+| `async send_request(data, context=None)` | POST в API банка (создание QR) |
+| `async send_request_patch(data, endpoint, context=None)` | PATCH в API банка (блокировка QR) |
 | `parse_response(response)` | Разобрать ответ банка в стандартный dict |
 | `get_callback_url()` | Вернуть URL callback для этого банка |
 
@@ -436,12 +437,8 @@ __all__ += ['BankNew']
 
 | # | Файл | Проблема | Приоритет |
 |---|------|----------|-----------|
-| 1 | `bank_ci.py` | `API_SOAP_ERROR` в `except Exception` — должно быть `API_ERROR` | средний |
-| 2 | `bank_sb.py`, `bank_vtb.py` | `API_SOAP_ERROR` в `except Exception` (копипаста) | средний |
-| 3 | `legacy.py` | `API_SOAP_ERROR` в `except Exception` | средний |
 | 4 | `bank_sb.py` | Проверка `status_code == 200`, а не `202` (у CI — 202) | средний |
 | 5 | `bank_vtb.py` | То же | средний |
-| 6 | `worker/file_processor.py` | Использует legacy `api_bank` вместо factory — **только ci** | **высокий** |
 | 7 | `factory.py` | `get_bank_names()` хардкодит `["ci", "sb", "vtb"]` — не из `BANK_CONFIG` | низкий |
 | 8 | `factory.py` | Не использует `config.BANK_CONFIG[bank]["api_class"]` | низкий |
 | 9 | `bank_sb.py`, `bank_vtb.py` | Идентичны, кроме URL / callback — можно сделать общий `SimpleBankClient` | низкий |
@@ -459,5 +456,6 @@ __all__ += ['BankNew']
 - [modules/worker.md](worker.md) — `file_processor` вызывает `api_bank.post`
 - [api.md](../api.md) — `/callback`, `/mockapi/qr-code`
 - [monitoring.md](../monitoring.md) — TCP-проверка банков (bank_api)
-- [workflows/callback_flow.md](../workflows/callback_flow.md) — что происходит после `202` (TODO)
+- [workflows/callback_flow.md](../workflows/callback_flow.md) — что происходит после `202`
+- [workflows/stop_payload.md](../workflows/stop_payload.md) — блокировка QR (stop)
 - [workflows/error_handling.md](../workflows/error_handling.md) — цепочка ошибок (TODO)

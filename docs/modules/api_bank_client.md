@@ -445,11 +445,10 @@ __all__ += ['BankNew']
 | 7 | `factory.py` | `get_bank_names()` хардкодит `["ci", "sb", "vtb"]` — не из `BANK_CONFIG` | низкий |
 | 8 | `factory.py` | Не использует `config.BANK_CONFIG[bank]["api_class"]` | низкий |
 | 9 | `bank_sb.py`, `bank_vtb.py` | Идентичны, кроме URL / callback — можно сделать общий `SimpleBankClient` | низкий |
-| 10 | `routes/callback.py` | Нет `/callback_sb` и `/callback_vtb` (клиенты на них рассчитывают) | **высокий** |
 | 11 | `config.BANK_URLS` | `sb` и `vtb` — заглушки (`"..."`), TCP-проверка пропускает | ожидаемо |
 | 12 | весь модуль | `parse_response` **не используется** — `worker` читает `response.status_code` напрямую | дизайн |
 
-**Критичные для мультибанковости:** #6 и #10.
+**Критичные для мультибанковости:** #6 (исправлено — `file_processor` использует factory).
 
 ---
 

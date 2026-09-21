@@ -220,10 +220,15 @@ curl "http://localhost:8512/stop_payload/zkh_ursv"
 
 ## 🔔 Callback от банка
 
-### `POST /callback`
+### `POST /callback` (ci) / `/callback_sb` (sb) / `/callback_vtb` (vtb)
 
 Принимает массив результатов от банка. Обновляет Job-статусы, ведёт статистику,
 при ошибке Job отправляет SOAP-уведомление в 1С.
+
+**Все три эндпоинта используют одну логику** (`modules/callback_base.py`),
+различаются только именем банка в логах. URL эндпоинта указан в
+`config.CALLBACK_URLS[bank]`.
+
 
 **Тело запроса:**
 ```json
@@ -545,7 +550,9 @@ class PayloadItem(BaseModel):
 | GET | `/create_payload_mq/jobs/pending` | payload |
 | DELETE | `/create_payload_mq/jobs/clean` | payload |
 | GET | `/stop_payload/{base}` | payload |
-| POST | `/callback` | callback |
+| POST | `/callback` | callback (ci) |
+| POST | `/callback_sb` | callback (sb) |
+| POST | `/callback_vtb` | callback (vtb) |
 | GET | `/stats` | статистика |
 | GET | `/stats/html` | статистика |
 | GET | `/clear_db/{minRequestID}` | статистика |

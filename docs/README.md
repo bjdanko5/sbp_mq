@@ -146,5 +146,4 @@ curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8512/project-docs/modu
 | `worker/consumer.py` | Пустой `except:` глотает `KeyboardInterrupt` | [modules/worker.md](modules/worker.md#-known-issues-todo) |
 | `job_manager/search.py` | `find_jobs(base=...)` игнорирует base без bank | [modules/job_manager.md](modules/job_manager.md#-known-issues-todo) |
 | `worker/file_processor.py` | Использует legacy `api_bank` (только ci) | [modules/api_bank_client.md](modules/api_bank_client.md#-known-issues-todo) |
-| `routes/callback.py` | Нет `/callback_sb` и `/callback_vtb` | [modules/api_bank_client.md](modules/api_bank_client.md#-known-issues-todo) |
 | `sh_prod/restart_prod.sh` | `sleep 5` не ждёт старта | [scripts/sh_prod.md](scripts/sh_prod.md#-known-issues-todo) |

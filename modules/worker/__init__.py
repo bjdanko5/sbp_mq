@@ -14,14 +14,12 @@ from .base import Worker
 from .consumer import MessageConsumer
 from .job_processor import JobProcessor
 from .file_processor import FileProcessor
-from .result_saver import ResultSaver
 
 __all__ = [
     'Worker',
     'MessageConsumer',
     'JobProcessor',
     'FileProcessor',
-    'ResultSaver',
 ]
 
 # Глобальный экземпляр для обратной совместимости

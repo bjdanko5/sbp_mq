@@ -24,7 +24,6 @@ if TYPE_CHECKING:
     from .consumer import MessageConsumer
     from .job_processor import JobProcessor
     from .file_processor import FileProcessor
-    from .result_saver import ResultSaver
 
 
 class Worker:
@@ -60,7 +59,6 @@ class Worker:
         self._consumer: Optional['MessageConsumer'] = None
         self._job_processor: Optional['JobProcessor'] = None
         self._file_processor: Optional['FileProcessor'] = None
-        self._result_saver: Optional['ResultSaver'] = None
     
     # ============================================================
     #                     ПОДКЛЮЧЕНИЕ
@@ -97,12 +95,10 @@ class Worker:
             from .consumer import MessageConsumer
             from .job_processor import JobProcessor
             from .file_processor import FileProcessor
-            from .result_saver import ResultSaver
             
             self._consumer = MessageConsumer(self)
             self._job_processor = JobProcessor(self)
             self._file_processor = FileProcessor(self)
-            self._result_saver = ResultSaver(self)
             
             logger.info(f"✅ Worker [{self.worker_id}] подключен к RabbitMQ и Redis")
             logger.info(f"   RabbitMQ: {self.rabbitmq_host}:{self.rabbitmq_port}")
@@ -211,10 +207,6 @@ class Worker:
     def file_processor(self) -> Optional['FileProcessor']:
         return self._file_processor
     
-    @property
-    def result_saver(self) -> Optional['ResultSaver']:
-        return self._result_saver
-    
     # ============================================================
     #                     ПРОКСИ-МЕТОДЫ
     # ============================================================
@@ -234,16 +226,6 @@ class Worker:
                 file_path, bank, base, paths, request_ids
             )
         return {'status': 'error', 'error': 'FileProcessor не инициализирован'}
-    
-    async def _save_result(self, task_id, result):
-        if self._result_saver:
-            return await self._result_saver.save_result(task_id, result)
-        return False
-    
-    async def _save_error(self, task_id, error):
-        if self._result_saver:
-            return await self._result_saver.save_error(task_id, error)
-        return False
 
 
 # ============================================================

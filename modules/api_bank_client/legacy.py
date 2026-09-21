@@ -84,7 +84,7 @@ class APIBankClient:
             )
         except Exception as e:
             return None, create_response(
-                status=config.STATUS["API_SOAP_ERROR"],
+                status=config.STATUS["API_ERROR"],
                 error=str(e),
                 context=context
             )

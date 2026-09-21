@@ -62,7 +62,7 @@ class BankSB(BaseBankClient):
         except Exception as e:
             log_error_with_context(e, f"API банка {self.bank_name} error")
             return None, create_response(
-                status=config.STATUS["API_SOAP_ERROR"],
+                status=config.STATUS["API_ERROR"],
                 error=str(e),
                 data={"bank": self.bank_name}
             )

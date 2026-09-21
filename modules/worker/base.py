@@ -4,6 +4,12 @@
 Отвечает за подключение к RabbitMQ и Redis, запуск и остановку.
 
 ⚠️ Все настройки берутся из config.py (единый источник).
+
+✅ Graceful shutdown (controlled abort):
+- request_shutdown() вызывается из signal handler (синхронно)
+- Отменяет _current_message_task (abort текущей Job) и _task (consume_loop)
+- start() ждёт завершения _current_message_task (через _wait_for_abort)
+  перед cleanup(), чтобы _handle_abort успел сделать nack
 """
 
 import asyncio
@@ -24,6 +30,10 @@ if TYPE_CHECKING:
     from .consumer import MessageConsumer
     from .job_processor import JobProcessor
     from .file_processor import FileProcessor
+
+
+# ✅ Таймаут ожидания завершения abort в start()
+ABORT_WAIT_TIMEOUT = 10.0
 
 
 class Worker:
@@ -54,6 +64,11 @@ class Worker:
         self.redis_client: Optional[redis.Redis] = None
         self.is_running = False
         self._task: Optional[asyncio.Task] = None
+        
+        # ✅ Состояние для controlled abort (SIGTERM)
+        self._shutdown_requested = False
+        self._current_job: Optional[dict] = None
+        self._current_message_task: Optional[asyncio.Task] = None
         
         # ✅ Инициализируем подмодули (с аннотациями типов)
         self._consumer: Optional['MessageConsumer'] = None
@@ -163,8 +178,11 @@ class Worker:
             try:
                 await self._task
             except asyncio.CancelledError:
-                logger.info(f"👋 Worker [{self.worker_id}] остановлен")
+                logger.info(f"👋 Worker [{self.worker_id}] consume_loop отменён")
             finally:
+                # ✅ Ждём завершения abort, если он ещё работает
+                await self._wait_for_abort()
+                
                 await self.cleanup()
                 # ✅ АГРЕГИРОВАННЫЙ ЛОГ
                 aggregated_logger.info(
@@ -180,8 +198,80 @@ class Worker:
             await self.cleanup()
             raise
     
+    async def _wait_for_abort(self):
+        """
+        Ждёт завершения _current_message_task (abort), если он ещё работает.
+        
+        Вызывается из start() перед cleanup(). Нужно, чтобы _handle_abort
+        успел сделать nack до закрытия RabbitMQ-соединения.
+        
+        _current_message_task НЕ обнуляется в consume_loop — это позволяет
+        _wait_for_abort видеть ссылку даже после выхода из consume_loop.
+        """
+        task = self._current_message_task
+        if task is None or task.done():
+            return
+        
+        logger.info(
+            f"⏳ Worker [{self.worker_id}] жду завершения abort "
+            f"(таймаут {ABORT_WAIT_TIMEOUT}s)..."
+        )
+        try:
+            await asyncio.wait_for(task, timeout=ABORT_WAIT_TIMEOUT)
+            logger.info(f"✅ Worker [{self.worker_id}] abort завершён")
+        except asyncio.TimeoutError:
+            logger.error(
+                f"❌ Worker [{self.worker_id}] таймаут ожидания abort "
+                f"({ABORT_WAIT_TIMEOUT}s) — abort не завершился"
+            )
+        except asyncio.CancelledError:
+            # Task был отменён (это ожидаемо), abort уже отработал внутри
+            logger.info(
+                f"✅ Worker [{self.worker_id}] abort завершён (по CancelledError)"
+            )
+        except Exception as e:
+            logger.error(
+                f"❌ Worker [{self.worker_id}] ошибка abort: {e}",
+                exc_info=True
+            )
+    
+    # ============================================================
+    #                CONTROLLED ABORT (SIGTERM)
+    # ============================================================
+    
+    def request_shutdown(self) -> None:
+        """
+        Синхронный вызов из signal handler.
+        
+        Отменяет:
+        - _current_message_task (если Job в работе → abort через CancelledError)
+        - _task (consume_loop, если ждёт сообщение)
+        
+        ⚠️ Не делать здесь await или сложную логику — signal handler
+        должен быть максимально быстрым.
+        """
+        self._shutdown_requested = True
+        self.is_running = False
+        
+        # 1. Отменяем текущую обработку (если есть) — это запустит _handle_abort
+        if self._current_message_task and not self._current_message_task.done():
+            logger.debug(
+                f"[Worker {self.worker_id}] request_shutdown: "
+                f"отменяю _current_message_task"
+            )
+            self._current_message_task.cancel()
+        
+        # 2. Отменяем consume_loop (если ждёт сообщение — разбудим)
+        if self._task and not self._task.done():
+            logger.debug(
+                f"[Worker {self.worker_id}] request_shutdown: "
+                f"отменяю consume_loop"
+            )
+            self._task.cancel()
+    
     async def stop(self):
-        """Остановка Worker."""
+        """Остановка Worker (ручная, не через сигнал)."""
+        self._shutdown_requested = True
         self.is_running = False
         if self._task:
             self._task.cancel()

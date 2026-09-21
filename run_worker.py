@@ -8,9 +8,15 @@ Worker управляется через systemd:
 - sbp_mq-worker@1.service    — Worker #2 (LOG_NAME=worker-1, WORKER_ID=mq-worker-1)
 - sbp_mq-worker@2.service    — Worker #3 (LOG_NAME=worker-2, WORKER_ID=mq-worker-2)
 - sbp_mq-worker@3.service    — Worker #4 (LOG_NAME=worker-3, WORKER_ID=mq-worker-3)
+
+✅ Graceful shutdown (controlled abort):
+- SIGTERM / SIGINT → worker.request_shutdown()
+- request_shutdown() отменяет _current_message_task (abort Job) и _task (consume_loop)
+- Abort: move_to_error + save_result + delete_progress + soap_notify + nack(requeue=False)
 """
 
 import asyncio
+import signal
 import sys
 import os
 from pathlib import Path
@@ -48,6 +54,25 @@ async def main() -> None:
     
     # ✅ Запускаем Worker
     from modules.worker.base import worker
+    
+    # ✅ Регистрируем обработчик SIGTERM/SIGINT для controlled abort
+    loop = asyncio.get_running_loop()
+    
+    def _on_signal(sig_name: str) -> None:
+        """Синхронный обработчик сигнала: только ставит флаг."""
+        logger.warning(
+            f"⚠️ [Worker {worker_id}] Получен {sig_name} — "
+            f"начинаю controlled abort"
+        )
+        aggregated_logger.warning(
+            f"⚠️ [Worker {worker_id}] {sig_name} — abort текущей Job | "
+            f"детали: logs/{log_name}_errors.log"
+        )
+        worker.request_shutdown()
+    
+    loop.add_signal_handler(signal.SIGTERM, lambda: _on_signal("SIGTERM"))
+    loop.add_signal_handler(signal.SIGINT,  lambda: _on_signal("SIGINT"))
+    
     await worker.start()
 
 

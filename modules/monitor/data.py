@@ -31,12 +31,16 @@ async def get_monitor_data() -> dict:
     processing.sort(key=lambda x: x.get('started_at', ''), reverse=True)
     completed.sort(key=lambda x: x.get('finished_at', ''), reverse=True)
     
+    # ✅ Ленивый импорт — избегаем циклической зависимости
+    from .ws import get_bank_api_last
+
     return {
         "timestamp": datetime.now().isoformat(),
         "processing": processing,
         "completed": completed,
         "banks": sorted(banks),
         "bases": sorted(bases),
+        "bank_api": get_bank_api_last(),
     }
 
 

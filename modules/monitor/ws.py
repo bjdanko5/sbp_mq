@@ -89,6 +89,9 @@ async def monitor_poller(stop_event: asyncio.Event) -> None:
                     "bases": data["bases"],
                     "cards_html": render_cards_html(data),
                 }
+                # ✅ Добавляем bank_api (если есть данные)
+                if bank_api_last:
+                    payload["bank_api"] = bank_api_last
                 await manager.broadcast(payload)
                 last_hash = current_hash
                 
@@ -121,8 +124,22 @@ bank_api_last: dict = {}
 
 
 def get_bank_api_last() -> dict:
-    """Возвращает последний статус банков (актуальный)."""
-    return bank_api_last
+    """Возвращает последний статус банков (актуальный).
+    
+    Приоритет:
+    1. bank_api_last — заполнен после первого broadcast
+    2. bank_api_state.last_result — заполнен при каждом check_all_banks
+    
+    Это решает проблему "bank_api: {}" в первые 5-30 сек после старта.
+    """
+    if bank_api_last:
+        return bank_api_last
+    # Fallback — берём из bank_api_state (заполняется в record())
+    if bank_api_state is not None:
+        last = bank_api_state.last_result
+        if last:
+            return last
+    return {}
 
 
 async def bank_api_poller(stop_event: asyncio.Event) -> None:

@@ -53,13 +53,14 @@ async def monitor_data():
     """API для получения данных мониторинга (JSON)."""
     data = await get_monitor_data()
     return {
-        "timestamp": datetime.now().isoformat(),
-        "processing_count": len(data['processing']),
-        "completed_count": len(data['completed']),
-        "banks": data['banks'],
-        "bases": data['bases'],
-        "processing": data['processing'],
-        "completed": data['completed'],
+        "timestamp": data["timestamp"],
+        "processing_count": len(data["processing"]),
+        "completed_count": len(data["completed"]),
+        "banks": data["banks"],
+        "bases": data["bases"],
+        "processing": data["processing"],
+        "completed": data["completed"],
+        "bank_api": data.get("bank_api", {}),
     }
 
 

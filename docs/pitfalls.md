@@ -79,40 +79,6 @@ Pylance видит `None` и ругается.
 
 ---
 
-## `move_to_error` не снимает лок
-
-**Симптом:** после abort'а (или обычной ошибки Job) в Redis остаётся ключ
-`lock:*` на файл, которого уже нет в `/sbp/jobs/`.
-
-**Причина:** `job_manager.move_to_error` → `_move_job_file` делает только
-`shutil.move(src, dst)` — **не трогает** `mq_client.locker`.
-А `save_result` снимает лок только если передан `file_path`:
-
-    if file_path and self.parent.locker:
-        await self.parent.locker.mark_processed(file_path, result)
-        await self.parent.locker.unlock_file(file_path)
-
-В `_handle_abort` мы **не передаём** `file_path` — значит, лок не снимается.
-
-**Как не наступить:**
-
-- **Вариант A (текущий):** забить. Лок умрёт по TTL (если он есть) или
-  будет висеть «мёртвым» в Redis. Не мешает, если 1С не переотправляет Job.
-- **Вариант B:** снимать лок явно в `_handle_abort` **до** `move_to_error`:
-
-      if task_id:
-          await mq_client.locker.unlock_file(file_path)
-      job_manager.move_to_error(bank, base, job_id)
-
-- **Вариант C:** добавить снятие лока внутрь `move_to_error` (правильнее
-  архитектурно, но правка `job_manager`, не воркера).
-
-**Проверка:** `redis-cli -n 1 KEYS "lock:*"`
-
-**Дата:** 2026-09-21
-
----
-
 ## `time.sleep` в `async def` блокирует event loop
 
 **Симптом:** во время обработки Job `Ctrl+C` не срабатывает. В логе
@@ -207,6 +173,47 @@ callback возвращает `status: success`, но 1С НЕ обработа�
 - Не использовать UUID, `date +%s`, префиксы со словами
 
 **Дата:** 2026-09-22
+
+---
+
+## Лок не снимается при abort / ошибке Job
+
+**Симптом:** после abort'а (или обычной ошибки Job) в Redis остаётся ключ
+`lock:*` на файл, которого уже нет в `/sbp/jobs/`. Повторная публикация
+того же Job → `JOB_ALREADY_PROCESSING`.
+
+**Причина:** лок ставится в `routes/create_payload_mq.py`
+(ключ `lock:job:{bank}:{base}:{job_id}`). `job_manager.move_to_error` →
+`_move_job_file` исторически делал только `shutil.move(src, dst)` —
+**не трогал** `mq_client.locker`. При `_handle_abort` (SIGTERM) лок
+вообще не снимался.
+
+**История (2026-09-21):** рассматривали 3 варианта:
+
+- **A)** забить — лок умрёт по TTL (или будет висеть)
+- **B)** снимать лок явно в `_handle_abort`
+- **C)** добавить снятие внутрь `move_to_error` (архитектурно правильнее)
+
+**Решение (2026-09-22, коммит `896cc29`):** выбран **Вариант C**.
+`move_to_error` и `move_to_success` теперь сами снимают лок через
+`_unlock_job` (sync-клиент Redis, потому что `move_to_*` — синхронные).
+
+**Как не наступить:**
+
+- `move_to_error` / `move_to_success` **снимают лок** (сделано)
+- При отладке — чистить вручную:
+
+    redis-cli -n 1 --scan --pattern "lock:*" | xargs -r redis-cli -n 1 del
+
+- `sh_dev/test_smoke.sh` чистит локи в подготовке
+- Проверка после теста:
+
+    redis-cli -n 1 keys "lock:*"
+    # ожидаемо: (empty array)
+
+**Проверка:** `redis-cli -n 1 KEYS "lock:*"`
+
+**Дата:** 2026-09-21 / обновлено 2026-09-22
 
 ---
 

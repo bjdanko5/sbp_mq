@@ -12,7 +12,6 @@ from routes.stop_payload import router as stop_payload_router
 from routes.callback import router as callback_router
 from routes.callback_sb import router as callback_sb_router
 from routes.callback_vtb import router as callback_vtb_router
-from routes.stats import router as stats_router
 from routes.mockapi import router as mockapi_router
 from routes.monitor import router as monitor_router
 from routes.docs import router as docs_router
@@ -31,7 +30,6 @@ def register_routes(app: FastAPI):
     app.include_router(callback_router)
     app.include_router(callback_sb_router)
     app.include_router(callback_vtb_router)
-    app.include_router(stats_router)
     app.include_router(mockapi_router, prefix="/mockapi")
     app.include_router(monitor_router)
     app.include_router(docs_router)

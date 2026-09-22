@@ -276,24 +276,6 @@ redis-cli -n 1 del 'lock:/sbp/mq_dev/ci/zkh_ursv/7845.json'
 
 ## 📊 Мониторинг ошибок
 
-### Счётчики в `/stats`
-
-```bash
-curl http://localhost:8512/stats?hours=24 | jq '.data.total'
-```
-
-```json
-{
-  "requests": 152,
-  "success": 148,
-  "errors": 4,
-  "files": 12,
-  "soap_calls": 4
-}
-```
-
-`errors` и `soap_calls` — прямые счётчики проблем.
-
 ### Карточки в `/monitor`
 
 В карточке завершённой задачи с ошибкой видно **текст ошибки**:

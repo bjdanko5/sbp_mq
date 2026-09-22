@@ -302,7 +302,6 @@ sudo journalctl -u sbp_mq-dev.service | grep "SOAP"
 
 1. Новая таблица в SQLite (`callbacks`): `request_id`, `bank`, `base`, `job_id`, `error`, `received_at`
 2. В `routes/callback.py` — после успешного resolve — `db.save_callback(...)`
-3. Эндпоинт `/stats/callbacks` для просмотра
 
 ### Добавить `/callback_sb` и `/callback_vtb`
 

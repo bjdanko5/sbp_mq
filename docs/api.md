@@ -318,47 +318,6 @@ curl -X POST http://localhost:8512/callback \
 
 ## 📈 Статистика
 
-### `GET /stats`
-
-JSON-статистика за период.
-
-| Параметр | Тип | Описание |
-|----------|-----|----------|
-| `hours` | int (query) | Последние N часов |
-| `start` | string (query) | Начало периода (ISO) |
-| `end` | string (query) | Конец периода (ISO) |
-| `base` | string (query) | Фильтр по базе |
-
-```bash
-curl "http://localhost:8512/stats?hours=24"
-curl "http://localhost:8512/stats?start=2026-09-19T00:00&end=2026-09-20T00:00&base=zkh_ursv"
-```
-
-**Ответ:**
-```json
-{
-  "status": "SUCCESS",
-  "message": "Статистика за 24 часов",
-  "data": {
-    "period": {"hours": 24, "start": "…", "end": "…"},
-    "total": {"requests": 152, "success": 148, "errors": 4, "files": 12, "soap_calls": 4},
-    "bases": {
-      "zkh_ursv": {"requests": 100, "success": 98, "errors": 2, "files": 8, "files_processed": 8, "soap_calls": 2, "db_deletes": 0}
-    }
-  }
-}
-```
-
----
-
-### `GET /stats/html`
-
-То же самое, но HTML-страница с карточками баз и файлов. Открывать в браузере:
-
-`http://localhost:8512/stats/html?hours=24`
-
----
-
 ### `GET /clear_db/{minRequestID}`
 
 Удаление из SQLite записей с `requestID < minRequestID`.
@@ -599,8 +558,6 @@ class PayloadItem(BaseModel):
 | POST | `/callback` | callback (ci) |
 | POST | `/callback_sb` | callback (sb) |
 | POST | `/callback_vtb` | callback (vtb) |
-| GET | `/stats` | статистика |
-| GET | `/stats/html` | статистика |
 | GET | `/clear_db/{minRequestID}` | статистика |
 | GET | `/clear_one_db/{RequestID}` | статистика |
 | GET | `/vacuum` | статистика |

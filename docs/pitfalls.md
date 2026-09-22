@@ -217,6 +217,45 @@ callback возвращает `status: success`, но 1С НЕ обработа�
 
 ---
 
+## `BASE_DIR = Path(...)` до `from pathlib import Path`
+
+**Симптом:** сервис не поднимается после правки. В `journalctl -u sbp_mq-dev`:
+
+    File "/var/www/html/sbp_mq_dev/sbp.py", line 13, in <module>
+        BASE_DIR = Path(__file__).resolve().parent
+    NameError: name 'Path' is not defined
+
+**Причина:** при добавлении `BASE_DIR = Path(__file__).resolve().parent` скрипт
+вставил его **сразу после** `sys.path.insert(...)`, **до** `from pathlib import Path`.
+Python выполняет **сверху вниз** — `Path` ещё не импортирован.
+
+**Как не наступить:**
+
+- **`BASE_DIR`** — **после** всех импортов, **перед** `app = FastAPI(...)`
+- Все `from ... import ...` — **в начале файла**, до любого исполняемого кода
+- Порядок в `sbp.py`:
+
+      import os
+      import sys
+      import asyncio
+      from contextlib import asynccontextmanager
+      from pathlib import Path                    # ← импорт здесь
+
+      # sys.path.insert(...)
+
+      from fastapi import FastAPI
+      from fastapi.staticfiles import StaticFiles
+      # ... другие импорты
+
+      BASE_DIR = Path(__file__).resolve().parent  # ← после импортов
+      app = FastAPI(lifespan=lifespan)
+
+- Если правишь `sbp.py` скриптом — **проверяй `head -25 sbp.py`** после правки
+
+**Дата:** 2026-09-22
+
+---
+
 ## Шаблон для новой записи
 
     ## Краткое название грабли

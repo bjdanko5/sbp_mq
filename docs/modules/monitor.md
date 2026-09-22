@@ -14,13 +14,29 @@
 modules/monitor/
 ├── __init__.py      38 строк   ← публичный API модуля
 ├── bank_api.py     240 строк   ← TCP-проверка банков + backoff
-├── data.py         126 строк   ← сбор данных из Redis
+├── data.py         130 строк   ← сбор данных из Redis
 ├── render.py       219 строк   ← HTML-рендер карточек
-├── templates.py    677 строк   ← HTML+CSS+JS дашборда /monitor
+├── templates.py     17 строк   ← тонкая обёртка (читает HTML из файла)
 └── ws.py           170 строк   ← ConnectionManager + 2 poller'а
 ```
 
-**Итого:** 1470 строк, 6 файлов.
+**+ статика и шаблоны** (в корне проекта):
+
+```
+static/
+├── monitor.css     424 строки  ← CSS дашборда
+└── monitor.js      201 строка  ← JS дашборда (WS, фильтры, рендер)
+
+templates/
+└── monitor.html     70 строк   ← HTML-структура дашборда
+```
+
+**Итого модуля:** ~814 строк, **+ 695 строк** в `static/` + `templates/`.
+
+**Почему разбито:** HTML/CSS/JS раньше были в одной Python-строке.
+Вынесены в **отдельные файлы** — IDE-подсветка, кеш браузера, легче править.
+`templates.py` — тонкая обёртка, читает `templates/monitor.html`.
+CSS/JS отдаются через `/static/` (см. `sbp.py` — `app.mount`).
 
 ---
 

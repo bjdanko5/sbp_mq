@@ -8,6 +8,7 @@
 
 import json
 import shutil
+import redis as sync_redis
 from pathlib import Path
 from typing import Dict, Any, Optional,TYPE_CHECKING
 
@@ -153,19 +154,51 @@ class FileOperations:
     # ============================================================
     
     def move_to_success(self, bank: str, base: str, job_id: int) -> bool:
-        """Перемещает Job-файл в папку success."""
+        """Перемещает Job-файл в папку success + снимает лок в Redis."""
         stack = get_function_stack()
+
+        # ✅ Снимаем лок в Redis (sync — move_to_success синхронный)
+        self._unlock_job(bank, base, job_id, stack)
+
         src = self.get_job_file_path(bank, base, job_id)
         dst = self.get_success_path(bank, base, job_id)
         return self._move_job_file(src, dst, "success", stack)
     
     def move_to_error(self, bank: str, base: str, job_id: int) -> bool:
-        """Перемещает Job-файл в папку error."""
+        """Перемещает Job-файл в папку error + снимает лок в Redis."""
         stack = get_function_stack()
+
+        # ✅ Снимаем лок в Redis (sync — move_to_error синхронный)
+        self._unlock_job(bank, base, job_id, stack)
+
         src = self.get_job_file_path(bank, base, job_id)
         dst = self.get_error_path(bank, base, job_id)
         return self._move_job_file(src, dst, "error", stack)
     
+    def _unlock_job(self, bank: str, base: str, job_id: int, stack: str) -> None:
+        """
+        Снимает лок job:{bank}:{base}:{job_id} в Redis.
+        
+        Sync-версия, потому что move_to_error/move_to_success синхронные.
+        Ошибка снятия лока НЕ критична — только warning в лог.
+        """
+        lock_key = f"lock:job:{bank}:{base}:{job_id}"
+        try:
+            r = sync_redis.Redis(
+                host=config.REDIS_HOST,
+                port=config.REDIS_PORT,
+                db=config.REDIS_DB,
+                decode_responses=True,
+                socket_connect_timeout=2,
+                socket_timeout=2,
+            )
+            deleted = r.delete(lock_key)
+            r.close()
+            if deleted:
+                logger.debug(f"[{stack}] Лок снят: {lock_key}")
+        except Exception as e:
+            logger.warning(f"[{stack}] Не удалось снять лок {lock_key}: {e}")
+
     def _move_job_file(self, src: Path, dst: Path, folder: str, stack: str) -> bool:
         """Внутренний метод для перемещения Job-файла."""
         if not src.exists():

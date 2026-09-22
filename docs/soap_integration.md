@@ -281,9 +281,161 @@ Retry **только** на `requests.exceptions.RequestException`:
 
 ---
 
-## 🧪 Отладка
+## 🧪 Проверка на DEV
 
-### Вручную отправить SOAP
+### 🎯 Что проверяем
+
+**Основной сценарий:** при ошибке Job → SOAP-сообщение уходит в 1С → 1С принимает и отвечает.
+
+**Что увидим в логах:**
+
+    [SOAP Notify] Отправка уведомления об ошибке: ci@zkh_ursv@88806 — 88806.json: {"detail":"Amount must be positive"}
+    [SOAP Notify] Ответ 1С: zkh_ursv Получено сообщение jobId: 88806 88806.json: {"detail":"Amount must be positive"}
+    [SOAP Notify] ✅ Уведомление job_error_ci@zkh_ursv@88806 отправлено
+
+---
+
+### 🚀 Готовый скрипт — `sh_dev/test_soap_on_error.sh`
+
+**Запуск:**
+
+    cd /var/www/html/sbp_mq_dev
+    ./sh_dev/test_soap_on_error.sh
+
+**Что делает:**
+1. Создаёт Job с **валидным JSON**, но `amount < 0` → mockapi вернёт **400**
+2. Публикует Job через `create_payload_mq`
+3. Ждёт обработки (5 сек)
+4. Показывает: статус Job, `task:*` в Redis, логи `[SOAP Notify]`
+
+**Почему `amount < 0`:**
+- **Невалидный JSON** (`not a valid json`) → падает **раньше**, SOAP **не вызывается**
+- **Валидный JSON + `amount < 0`** → падает **в `job_processor`**, `status="error"` → **SOAP вызывается**
+
+**Ожидаемый вывод (успех):**
+
+    🔥 SOAP Notify в логах:
+    [SOAP Notify] Отправка уведомления об ошибке: ci@zkh_ursv@88806 — 88806.json: {"detail":"Amount must be positive"}
+    [SOAP Notify] Ответ 1С: zkh_ursv Получено сообщение jobId: 88806 88806.json: {"detail":"Amount must be positive"}
+    [SOAP Notify] ✅ Уведомление job_error_ci@zkh_ursv@88806 отправлено
+
+---
+
+### 🔧 Ручная проверка (без скрипта)
+
+**1. Создать Job с ошибочным запросом:**
+
+    cat > /sbp/mq_dev/ci/zkh_ursv/88806.json << 'EOF'
+    [{"requestId":"88806001","amount":-100}]
+    EOF
+
+    cat > /sbp/mq_dev/jobs/ci@zkh_ursv@88806.json << 'EOF'
+    {
+      "bank": "ci", "base": "zkh_ursv", "job_id": 88806,
+      "job_name": "SOAP Test", "created_at": "2026-09-22T09:00:00",
+      "files": [{"filename": "88806.json", "count": 1, "request_ids": ["88806001"]}],
+      "total_requests": 1, "status": "pending"
+    }
+    EOF
+
+**2. Опубликовать:**
+
+    curl -s "http://localhost:8512/create_payload_mq/ci/zkh_ursv/88806" | jq .
+
+**3. Подождать и проверить логи:**
+
+    sleep 5
+    grep "SOAP Notify" /var/www/html/sbp_mq_dev/logs/sbp-dev.log
+
+**4. Проверить, что Job → error/:**
+
+    ls -la /sbp/mq_dev/jobs/error/ci@zkh_ursv@88806.json
+
+**5. Проверить task:* в Redis:**
+
+    TASK_ID=$(curl -s "http://localhost:8512/create_payload_mq/ci/zkh_ursv/88806/status" | jq -r '.data.task_id')
+    redis-cli -n 1 get "task:$TASK_ID" | jq '{status, summary}'
+    # ожидаемо: status="error", summary.error_files=1
+
+---
+
+### 📊 Что показывает успешную отправку
+
+| Что | Где видно |
+|-----|-----------|
+| **SOAP-вызов происходит** | `[SOAP Notify] Отправка уведомления об ошибке: ...` |
+| **1С получила сообщение** | `[SOAP Notify] Ответ 1С: <base> Получено сообщение jobId: X ...` |
+| **Отправка завершена** | `[SOAP Notify] ✅ Уведомление ... отправлено` |
+| **Job помечен error** | `task:*` в Redis: `status="error"` |
+| **Job → error/** | `jobs/error/ci@<base>@<job_id>.json` |
+
+**Ключевое:** строка **`Ответ 1С: ... Получено сообщение jobId: X`** — подтверждение от 1С, что сообщение **дошло и распарсилось**.
+
+---
+
+### 🆘 Что если ошибка
+
+| Симптом | Причина | Что делать |
+|---------|---------|-----------|
+| `404 Not Found` | Базы **нет** на SOAP-сервере | Используй `zkh_ursv` (не `zkh_ursv2`/`zkh_ursv3`) |
+| `Timeout` | SOAP-сервер недоступен | `telnet 192.168.10.238 80` |
+| `Auth error` | Неверный пароль | Проверить `config.SOAP_CONFIG["base"]` |
+| **Нет `[SOAP Notify]` в логах** | Job завершился **без ошибки** | Проверить `worker/consumer.py`: `if result.get("status") != "completed"` |
+| `❌ Ошибка уведомления` | SOAP-сервер вернул ошибку | Смотреть **текст ошибки** после `❌` |
+
+---
+
+### 🌐 SOAP-сервер
+
+**URL:** `http://192.168.10.238/{base}/ws/WebLK?wsdl`
+**Метод:** `ProcessPayload`
+
+**Формат payload (Job Error):**
+
+    [
+      {
+        "jobId": "88806",
+        "bank": "ci",
+        "base": "zkh_ursv",
+        "errorMessage": "88806.json: {\"detail\":\"Amount must be positive\"}",
+        "jobName": "SOAP Test"
+      }
+    ]
+
+**Ответ 1С (успех):**
+
+    {base} Получено сообщение jobId: {jobId} {errorMessage}
+
+**1С по этому сообщению:**
+- Находит **Задание печати** по `Код` (совпадает с `jobId`)
+- Устанавливает `ВидОперации = 0` (сброс)
+- Записывает `ЗавершеноАварийно`
+- Возвращает эхо-ответ
+
+---
+
+### 🧪 Проверка на стороне 1С
+
+**Спросить у 1С-команды:**
+- Пришло ли сообщение `ProcessPayload` с `jobId = 88806`?
+- Что записалось в регистре?
+
+---
+
+### 📁 Логи
+
+**Файлы:**
+
+    tail -f /var/www/html/sbp_mq_dev/logs/sbp-dev.log
+    grep "SOAP Notify" /var/www/html/sbp_mq_dev/logs/sbp-dev.log
+    tail -f /var/www/html/sbp_mq_dev/logs/sbp-dev_errors.log
+
+**Фильтр в реальном времени:**
+
+    tail -f /var/www/html/sbp_mq_dev/logs/sbp-dev.log | grep --line-buffered "SOAP Notify"
+
+
+## Вручную отправить SOAP
 
 ```python
 # python -i

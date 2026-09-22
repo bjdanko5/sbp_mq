@@ -3,13 +3,16 @@ import os
 import sys
 import asyncio
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 # ✅ НАСТРОЙКА ПУТЕЙ (ТОЛЬКО ЗДЕСЬ!)
 current_dir = os.path.dirname(__file__)
 if current_dir not in sys.path:
     sys.path.insert(0, current_dir)
 
+
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 from modules.logger_config import configure_uvicorn_access_filter
 from modules.mq_client import mq_client
@@ -97,7 +100,12 @@ async def lifespan(app: FastAPI):
 #                     ПРИЛОЖЕНИЕ
 # ============================================================
 
+BASE_DIR = Path(__file__).resolve().parent
+
 app = FastAPI(lifespan=lifespan)
+
+# ✅ Static files (CSS/JS для мониторинга)
+app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 register_exception_handlers(app)
 
 # Регистрируем все маршруты из routes/

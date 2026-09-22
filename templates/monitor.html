@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📊 Мониторинг SBP</title>
+    <link rel="stylesheet" href="/static/monitor.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div>
+                <h1>📊 Мониторинг SBP</h1>
+                <div class="time">Обновление: <span id="update-time">—</span></div>
+            </div>
+            <div class="header-actions">
+                <a href="/project-docs" target="_blank" class="header-btn" title="Документация проекта">📖 Документация</a>
+                <div class="header-status">
+                    <span class="status-dot"></span>
+                    <span id="status-text">WS: подключение...</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="summary">
+            <div class="summary-card">
+                <div class="number blue" id="processing-count">0</div>
+                <div class="label">🔥 В обработке</div>
+            </div>
+            <div class="summary-card">
+                <div class="number green" id="completed-count">0</div>
+                <div class="label">✅ Завершено (5 мин)</div>
+            </div>
+            <div class="summary-card">
+                <div class="number orange" id="banks-count">0</div>
+                <div class="label">🏦 Банков</div>
+            </div>
+            <div class="summary-card">
+                <div class="number orange" id="bases-count">0</div>
+                <div class="label">📁 Баз</div>
+            </div>
+        </div>
+        
+        <div class="filters">
+            <input type="text" id="filter-text" placeholder="🔍 Поиск по bank@base@job_id или task_id...">
+            <select id="filter-bank"><option value="">Все банки</option></select>
+            <select id="filter-base"><option value="">Все базы</option></select>
+            <select id="filter-status">
+                <option value="">Все статусы</option>
+                <option value="processing">🔥 В обработке</option>
+                <option value="completed">✅ Завершено</option>
+                <option value="error">❌ С ошибками</option>
+            </select>
+            <button onclick="resetFilters()">🔄 Сброс</button>
+        </div>
+        
+        <!-- 🏦 API банков -->
+        <div class="section">
+            <h2>🏦 API банков <span class="count" id="bank-api-count">0</span></h2>
+            <div class="cards-grid" id="bank-api-grid">
+                <div class="empty">Ожидание данных (первая проверка через 60 сек)...</div>
+            </div>
+        </div>
+        
+        <div id="cards-container"><div class="empty">Загрузка...</div></div>
+    </div>
+    
+    <script src="/static/monitor.js"></script>
+</body>
+</html>

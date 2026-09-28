@@ -13,73 +13,75 @@ from modules.sbp_root import SBPRoot, SBPPath, create_sbp_root
 # ============================================================
 #                   ПЕРЕМЕННЫЕ ОКРУЖЕНИЯ
 # ============================================================
-
-os.environ.setdefault('PYTHONUNBUFFERED', '1')
-os.environ.setdefault('PYDEVD_USE_FRAME_EVAL', 'NO')
-
+# Философия: .env — единственный источник правды.
+# Все переменные обязательны. Нет переменной → падаем.
+# Переменные приходят из:
+#   - systemd EnvironmentFile=/path/.env (для сервисов)
+#   - source .env (в run_debug.sh)
+#   - dotenv в conftest.py (для тестов)
+# ============================================================
 
 # ============================================================
-#                     УТИЛИТЫ ДЛЯ ПЕРЕМЕННЫХ ОКРУЖЕНИЯ
+#          УТИЛИТЫ ДЛЯ ПЕРЕМЕННЫХ ОКРУЖЕНИЯ (обязательные)
 # ============================================================
 
-def parse_bool_env(var_name: str, default: bool = False) -> bool:
+def _require_env(var_name: str) -> str:
     """
-    Безопасный парсинг булевых переменных окружения.
-    
+    Возвращает переменную окружения или падает с понятной ошибкой.
+
+    Философия: .env — единственный источник правды.
+    Не должно быть тихих дефолтов, которые маскируют ошибки конфигурации.
+    """
+    value = os.getenv(var_name)
+    if value is None or value.strip() == '':
+        raise ValueError(
+            f"❌ Переменная окружения '{var_name}' не задана. "
+            f"Проверь .env — он должен загружаться через "
+            f"systemd EnvironmentFile или run_debug.sh (source .env)."
+        )
+    return value.strip()
+
+
+def parse_bool_env(var_name: str) -> bool:
+    """
+    Парсит обязательную булеву переменную окружения.
+
     Поддерживает:
-    - true, True, TRUE, 1, yes, on → True
-    - false, False, FALSE, 0, no, off → False
-    
-    Args:
-        var_name: Имя переменной
-        default: Значение по умолчанию
-    
-    Returns:
-        bool: Распарсенное значение
+    - true, True, TRUE, 1, yes, on, y, t → True
+    - false, False, FALSE, 0, no, off, n, f → False
     """
-    value = os.getenv(var_name)
-    if value is None:
-        return default
-    
-    value_lower = value.lower().strip()
-    
-    # True значения
-    if value_lower in ('true', '1', 'yes', 'on', 'y', 't'):
+    value = _require_env(var_name).lower()
+    if value in ('true', '1', 'yes', 'on', 'y', 't'):
         return True
-    
-    # False значения
-    if value_lower in ('false', '0', 'no', 'off', 'n', 'f'):
+    if value in ('false', '0', 'no', 'off', 'n', 'f'):
         return False
-    
-    # Если значение не распознано, возвращаем default
-    return default
+    raise ValueError(
+        f"❌ {var_name}='{value}' не распознано как bool. "
+        f"Ожидается: true/false, 1/0, yes/no, on/off"
+    )
 
 
-def parse_int_env(var_name: str, default: int) -> int:
-    """Парсит целочисленную переменную окружения."""
-    value = os.getenv(var_name)
-    if value is None:
-        return default
+def parse_int_env(var_name: str) -> int:
+    """Парсит обязательную целочисленную переменную окружения."""
+    value = _require_env(var_name)
     try:
         return int(value)
     except ValueError:
-        return default
+        raise ValueError(f"❌ {var_name}='{value}' не является целым числом")
 
 
-def parse_float_env(var_name: str, default: float) -> float:
-    """Парсит дробную переменную окружения."""
-    value = os.getenv(var_name)
-    if value is None:
-        return default
+def parse_float_env(var_name: str) -> float:
+    """Парсит обязательную дробную переменную окружения."""
+    value = _require_env(var_name)
     try:
         return float(value)
     except ValueError:
-        return default
+        raise ValueError(f"❌ {var_name}='{value}' не является числом")
 
 
-def parse_str_env(var_name: str, default: str) -> str:
-    """Парсит строковую переменную окружения."""
-    return os.getenv(var_name, default)
+def parse_str_env(var_name: str) -> str:
+    """Парсит обязательную строковую переменную окружения."""
+    return _require_env(var_name)
 
 
 # ============================================================
@@ -118,27 +120,28 @@ SERVER_SERVICE = f"{SERVICE_PREFIX}.service"
 #                     НАСТРОЙКИ ПОРТА
 # ============================================================
 
-SBP_MQ_PORT = parse_int_env('SBP_MQ_PORT', 8511)
-SBP_MQ_DEBUG_PORT = parse_int_env('SBP_MQ_DEBUG_PORT', 5679)
+SBP_MQ_PORT = parse_int_env('SBP_MQ_PORT')
+SBP_MQ_DEBUG_PORT = parse_int_env('SBP_MQ_DEBUG_PORT')
 
 # Путь к БД
 DB_FILE = os.path.join(BASE_DIR, "requests.db")
 
 # Корневой путь для всей SBP системы
-SBP_ROOT4MQ = parse_str_env('SBP_ROOT4MQ', '/sbp/mq')
+SBP_ROOT4MQ = parse_str_env('SBP_ROOT4MQ')
 
 # Путь для Job-файлов
 SBP_ROOT4JOBS = os.path.join(SBP_ROOT4MQ, "jobs")
 
-# ✅ Пути для логов и данных (из .env, fallback на BASE_DIR)
-LOG_DIR = parse_str_env('LOG_DIR', os.path.join(BASE_DIR, "logs"))
-DATA_DIR = parse_str_env('DATA_DIR', os.path.join(BASE_DIR, "data"))
+# Пути для логов и данных (обязательны в .env)
+LOG_DIR = parse_str_env('LOG_DIR')
+DATA_DIR = parse_str_env('DATA_DIR')
+
 
 # ============================================================
 #                     ГЛОБАЛЬНЫЙ ЭКЗЕМПЛЯР SBP_ROOT
 # ============================================================
 
-# ✅ Создаём глобальный экземпляр из модуля sbp_root
+# Создаём глобальный экземпляр из модуля sbp_root
 SBP_ROOT = create_sbp_root(SBP_ROOT4MQ, default_bank="ci")
 
 # Для обратной совместимости — строка-представление
@@ -149,14 +152,15 @@ SBP_ROOT_STR = str(SBP_ROOT)
 #                     API НАСТРОЙКИ
 # ============================================================
 
-# ⚠️ ВНИМАНИЕ: 
-# - Для разработки: export TEST_MODE=true
-# - Для продакшена: export TEST_MODE=false или не устанавливать (по умолчанию false)
-TEST_MODE = parse_bool_env('TEST_MODE', default=True)
+TEST_MODE = parse_bool_env('TEST_MODE')
 
 # Базовые URL для банков
 BANK_URLS = {
-    "ci": "https://10.0.245.20:443/ivolga-api/qr-code" if not TEST_MODE else f"http://localhost:{SBP_MQ_PORT}/mockapi/qr-code",
+    "ci": (
+        f"http://localhost:{SBP_MQ_PORT}/mockapi/qr-code"
+        if TEST_MODE
+        else "https://10.0.245.20:443/ivolga-api/qr-code"
+    ),
     "sb": "https://sb.api.sberbank.ru/...",   # TODO: уточнить
     "vtb": "https://api.vtb.ru/..."           # TODO: уточнить
 }
@@ -168,10 +172,10 @@ CALLBACK_URLS = {
     "vtb": "/callback_vtb"
 }
 
-DEBUG_VERBOSE = parse_bool_env('DEBUG_VERBOSE', default=True)
-REQUEST_TIMEOUT = parse_float_env('REQUEST_TIMEOUT', 30.0)
-DELAY_BETWEEN_REQUESTS = parse_int_env('DELAY_BETWEEN_REQUESTS', 1)
-VERIFY_SSL = parse_bool_env('VERIFY_SSL', default=False)
+DEBUG_VERBOSE = parse_bool_env('DEBUG_VERBOSE')
+REQUEST_TIMEOUT = parse_float_env('REQUEST_TIMEOUT')
+DELAY_BETWEEN_REQUESTS = parse_int_env('DELAY_BETWEEN_REQUESTS')
+VERIFY_SSL = parse_bool_env('VERIFY_SSL')
 DEFAULT_HEADERS = {"Content-Type": "application/json"}
 
 
@@ -224,30 +228,33 @@ SOAP_CONFIG = {
     }
 }
 
-SOAP_TIMEOUT = parse_float_env('SOAP_TIMEOUT', 60)
-SOAP_OPERATION_TIMEOUT = parse_float_env('SOAP_OPERATION_TIMEOUT', 30)
-SOAP_MAX_RETRIES = parse_int_env('SOAP_MAX_RETRIES', 3)
-SOAP_RETRY_DELAY = parse_float_env('SOAP_RETRY_DELAY', 1)
+SOAP_TIMEOUT = parse_float_env('SOAP_TIMEOUT')
+SOAP_OPERATION_TIMEOUT = parse_float_env('SOAP_OPERATION_TIMEOUT')
+SOAP_MAX_RETRIES = parse_int_env('SOAP_MAX_RETRIES')
+SOAP_RETRY_DELAY = parse_float_env('SOAP_RETRY_DELAY')
 
 
 # ============================================================
 #                     НАСТРОЙКИ MQ
 # ============================================================
 
-RABBITMQ_HOST = parse_str_env('RABBITMQ_HOST', 'localhost')
-RABBITMQ_PORT = parse_int_env('RABBITMQ_PORT', 5672)
-RABBITMQ_USER = parse_str_env('RABBITMQ_USER', 'guest')
-RABBITMQ_PASSWORD = parse_str_env('RABBITMQ_PASSWORD', 'guest')
-RABBITMQ_QUEUE = parse_str_env('RABBITMQ_QUEUE', 'sbp_mq_queue')
+RABBITMQ_HOST = parse_str_env('RABBITMQ_HOST')
+RABBITMQ_PORT = parse_int_env('RABBITMQ_PORT')
+RABBITMQ_USER = parse_str_env('RABBITMQ_USER')
+RABBITMQ_PASSWORD = parse_str_env('RABBITMQ_PASSWORD')
+RABBITMQ_QUEUE = parse_str_env('RABBITMQ_QUEUE')
+
 
 # ============================================================
 #                     НАСТРОЙКИ REDIS
 # ============================================================
 
-REDIS_HOST = parse_str_env('REDIS_HOST', 'localhost')
-REDIS_PORT = parse_int_env('REDIS_PORT', 6379)
-REDIS_DB = parse_int_env('REDIS_DB', 0)
-REDIS_TTL = parse_int_env('REDIS_TTL', 3600)
+REDIS_HOST = parse_str_env('REDIS_HOST')
+REDIS_PORT = parse_int_env('REDIS_PORT')
+REDIS_DB = parse_int_env('REDIS_DB')
+REDIS_TTL = parse_int_env('REDIS_TTL')
+
+
 # ============================================================
 #                     REQUEST STORAGE
 # ============================================================
@@ -255,7 +262,7 @@ REDIS_TTL = parse_int_env('REDIS_TTL', 3600)
 # TTL для связки requestID → task_id (в секундах)
 # Callback обычно приходит в течение 1-5 минут
 # 1 час — с запасом
-REQUEST_TTL = parse_int_env('REQUEST_TTL', 3600)
+REQUEST_TTL = parse_int_env('REQUEST_TTL')
 
 
 # ============================================================

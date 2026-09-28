@@ -37,7 +37,7 @@
 └────────────────────────────────────────────────────────────┘
 ```
 
-- **URL:** `http://localhost:8512/monitor` (DEV) / `http://localhost:8511/monitor` (PROD)
+- **URL:** `http://localhost:8512/monitor` (DEV) / `http://localhost:8510/monitor` (PROD)
 - **Обновление:** realtime через `WS /ws/monitor`, **без перезагрузки страницы**
 - **Индикатор WS:** точка в правом верхнем углу (`●` зелёная / красная при disconnect)
 

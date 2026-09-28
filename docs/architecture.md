@@ -212,7 +212,7 @@ flowchart LR
 ## 🧬 Два окружения (worktree)
 
 ```
-/var/www/html/sbp_mq       [main]   PROD  8511  Redis 0  sbp_mq_queue
+/var/www/html/sbp_mq       [main]   PROD  8510  Redis 0  sbp_mq_queue
 /var/www/html/sbp_mq_dev   [dev]    DEV   8512  Redis 1  sbp_mq_dev_queue
 ```
 

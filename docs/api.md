@@ -4,10 +4,10 @@
 
 | Параметр | DEV | PROD |
 |----------|-----|------|
-| **Базовый URL** | `http://localhost:8512` | `http://localhost:8511` |
-| **Swagger UI** | `http://localhost:8512/docs` | `http://localhost:8511/docs` |
-| **OpenAPI JSON** | `http://localhost:8512/openapi.json` | `http://localhost:8511/openapi.json` |
-| **Документация проекта** | `http://localhost:8512/project-docs` | `http://localhost:8511/project-docs` |
+| **Базовый URL** | `http://localhost:8512` | `http://localhost:8510` |
+| **Swagger UI** | `http://localhost:8512/docs` | `http://localhost:8510/docs` |
+| **OpenAPI JSON** | `http://localhost:8512/openapi.json` | `http://localhost:8510/openapi.json` |
+| **Документация проекта** | `http://localhost:8512/project-docs` | `http://localhost:8510/project-docs` |
 
 **Формат ответа** — все эндпоинты (кроме отдающих HTML/файлы) возвращают
 JSON, обёрнутый `create_response()`:

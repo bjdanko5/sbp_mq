@@ -27,7 +27,7 @@ git worktree list
 |----------|-----|------|
 | **Путь** | `/var/www/html/sbp_mq_dev` | `/var/www/html/sbp_mq` |
 | **Ветка** | `dev` | `main` |
-| **HTTP порт** | 8512 | 8511 |
+| **HTTP порт** | 8512 | 8510 |
 | **debugpy порт** | 5680 | 5679 |
 | **Redis DB** | 1 | 0 |
 | **RabbitMQ queue** | `sbp_mq_dev_queue` | `sbp_mq_queue` |
@@ -112,7 +112,7 @@ git checkout -- .
 Проверить вручную:
 
 ```bash
-curl -s http://localhost:8511/monitor/data | jq .
+curl -s http://localhost:8510/monitor/data | jq .
 ```
 
 **5. Push dev → GitHub**
@@ -150,7 +150,7 @@ sudo systemctl restart sbp_mq-debug.service
 
 **9. Healthcheck 30×1с**
 
-Ждёт `HTTP 200` на `http://localhost:8511/health` — до 30 попыток по 1 сек.
+Ждёт `HTTP 200` на `http://localhost:8510/health` — до 30 попыток по 1 сек.
 Каждые 5 попыток печатает текущий код.
 
 **10. Финальный вывод**
@@ -158,8 +158,8 @@ sudo systemctl restart sbp_mq-debug.service
 ```
 🎉 ДЕПЛОЙ ЗАВЕРШЁН
 
-PROD (8511) /health:            {"status":"ok",...}
-PROD (8511) /health/detailed:   {"status":"ok","queue":"sbp_mq_queue",...}
+PROD (8510) /health:            {"status":"ok",...}
+PROD (8510) /health/detailed:   {"status":"ok","queue":"sbp_mq_queue",...}
 ```
 
 При провале healthcheck — печатает последние 30 строк
@@ -174,7 +174,7 @@ PROD (8511) /health/detailed:   {"status":"ok","queue":"sbp_mq_queue",...}
    DEV_DIR:   /var/www/html/sbp_mq_dev
    PROD_DIR:  /var/www/html/sbp_mq
    DEV_PORT:  8512
-   PROD_PORT: 8511
+   PROD_PORT: 8510
 
 ✅ Worktree: DEV=dev, PROD=main
 ✅ Dev чист
@@ -191,7 +191,7 @@ PROD (8511) /health/detailed:   {"status":"ok","queue":"sbp_mq_queue",...}
 
 🔄 Перезапуск sbp_mq-debug.service
 
-⏳ Ожидание HTTP на порту 8511...
+⏳ Ожидание HTTP на порту 8510...
    [1/30] HTTP: 000
    [5/30] HTTP: 000
    [8/30] ✅ HTTP 200
@@ -200,8 +200,8 @@ PROD (8511) /health/detailed:   {"status":"ok","queue":"sbp_mq_queue",...}
 🎉 ДЕПЛОЙ ЗАВЕРШЁН
 ════════════════════════════════════════
 
-PROD (8511) /health:            {"status":"ok",...}
-PROD (8511) /health/detailed:   {"status":"ok","queue":"sbp_mq_queue",...}
+PROD (8510) /health:            {"status":"ok",...}
+PROD (8510) /health/detailed:   {"status":"ok","queue":"sbp_mq_queue",...}
 ```
 
 ### Откат
@@ -235,7 +235,7 @@ sudo systemctl restart sbp_mq-debug.service
 | PROD на ветке `main` | `git -C $PROD_DIR branch --show-current` |
 | DEV git status чист | `git -C $DEV_DIR status --short` |
 | PROD git status чист | `git -C $PROD_DIR status --short` |
-| PROD не обрабатывает задачи | `curl -s http://localhost:8511/monitor/data \| jq .processing_count` |
+| PROD не обрабатывает задачи | `curl -s http://localhost:8510/monitor/data \| jq .processing_count` |
 
 ---
 
@@ -248,7 +248,7 @@ sudo systemctl restart sbp_mq-debug.service
 | `sbp_mq-dev.service` | `/etc/systemd/system/sbp_mq-dev.service` | **DEV HTTP** (8512) |
 | `sbp_mq-dev-worker.service` | `.../sbp_mq-dev-worker.service` | **DEV Worker default** |
 | `sbp_mq-dev-worker@.service` | `.../sbp_mq-dev-worker@.service` | **DEV Worker шаблон** (`%i` = N) |
-| `sbp_mq-debug.service` | `.../sbp_mq-debug.service` | **PROD HTTP** (8511) |
+| `sbp_mq-debug.service` | `.../sbp_mq-debug.service` | **PROD HTTP** (8510) |
 | `sbp_mq-worker.service` | `.../sbp_mq-worker.service` | **PROD Worker default** |
 | `sbp_mq-worker@.service` | `.../sbp_mq-worker@.service` | **PROD Worker шаблон** |
 
@@ -478,8 +478,8 @@ git checkout -- .        # откатить все локальные правк
 Дождись завершения или проверь:
 
 ```bash
-curl -s http://localhost:8511/monitor/data | jq .
-curl -s http://localhost:8511/health/detailed | jq '.components.workers'
+curl -s http://localhost:8510/monitor/data | jq .
+curl -s http://localhost:8510/health/detailed | jq '.components.workers'
 ```
 
 ### ❌ «pip install timeout (120s)»
@@ -503,7 +503,7 @@ sudo journalctl -u sbp_mq-debug.service -n 100 --no-pager
 Частые причины:
 - синтаксическая ошибка в коде (только что смерженном)
 - `.env` не читается
-- порт 8511 занят (`sudo lsof -i :8511`)
+- порт 8510 занят (`sudo lsof -i :8510`)
 
 ### ❌ Воркеры не видны в `/health/detailed`
 

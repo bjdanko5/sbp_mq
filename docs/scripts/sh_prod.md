@@ -2,7 +2,7 @@
 
 Работают **только с PROD**:
 - Сервисы: `sbp_mq-debug.service`, `sbp_mq-worker*`
-- Порт: 8511, Redis DB 0
+- Порт: 8510, Redis DB 0
 - Папки: `/sbp/mq/`, `/var/www/html/sbp_mq/`
 
 > ⚠️ **WARNING:** скрипты работают с продакшеном. Перед запуском — убедиться,
@@ -89,7 +89,7 @@ cd /var/www/html/sbp_mq_dev
 ./sh_prod/status_prod.sh
 ```
 
-- Загружает `.env` из DEV (для `PROD_DIR`), потом из PROD (для `SBP_MQ_PORT=8511`)
+- Загружает `.env` из DEV (для `PROD_DIR`), потом из PROD (для `SBP_MQ_PORT=8510`)
 - `systemctl status sbp_mq-debug.service` → `Active`, `Main PID`
 - `systemctl status sbp_mq-worker*` → все воркеры
 

@@ -3,7 +3,7 @@
 #
 # Логика портов:
 #   - DEV  .env → $SBP_MQ_PORT (8512) — только для лога
-#   - PROD .env → $SBP_MQ_PORT (8511) — для проверки PROD и healthcheck
+#   - PROD .env → $SBP_MQ_PORT (8510) — для проверки PROD и healthcheck
 #
 # ⚠️ ВАЖНО: проекты используют git worktree (общий .git):
 #   - $DEV_DIR  → worktree с веткой dev

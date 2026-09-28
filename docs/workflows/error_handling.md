@@ -316,7 +316,7 @@ tail -f logs/mq-worker-1_errors.log
 ### 2. Мониторить `/health/detailed`
 
 ```bash
-watch -n 5 'curl -s http://localhost:8511/health/detailed | jq ".status, .components.workers.active, .components.rabbitmq.queue_size"'
+watch -n 5 'curl -s http://localhost:8510/health/detailed | jq ".status, .components.workers.active, .components.rabbitmq.queue_size"'
 ```
 
 ### 3. Следить за размером `error/`
@@ -330,7 +330,7 @@ ls /sbp/mq/jobs/error/ | wc -l
 ### 4. Чистить старые Job
 
 ```bash
-curl -X DELETE "http://localhost:8511/create_payload_mq/jobs/clean?days=30"
+curl -X DELETE "http://localhost:8510/create_payload_mq/jobs/clean?days=30"
 ```
 
 ### 5. Проверять `callback_count` в мониторинге

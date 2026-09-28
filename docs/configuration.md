@@ -267,10 +267,10 @@ SOAP_CONFIG = {
 
 | Переменная | Default | .env | Смысл |
 |------------|---------|------|-------|
-| `SBP_MQ_PORT` | `8511` | ✅ | HTTP-порт |
+| `SBP_MQ_PORT` | `8510` | ✅ | HTTP-порт |
 | `SBP_MQ_DEBUG_PORT` | `5679` | ✅ | порт debugpy |
 
-**DEV:** `8512` / `5680`, **PROD:** `8511` / `5679`
+**DEV:** `8512` / `5680`, **PROD:** `8510` / `5679`
 
 `config.py` также выставляет:
 
@@ -390,7 +390,7 @@ STATUS_GROUPS = {
 
 | Переменная | DEV | PROD |
 |------------|-----|------|
-| `SBP_MQ_PORT` | `8512` | `8511` |
+| `SBP_MQ_PORT` | `8512` | `8510` |
 | `SBP_MQ_DEBUG_PORT` | `5680` | `5679` |
 | `SBP_ROOT4MQ` | `/sbp/mq_dev` | `/sbp/mq` |
 | `LOG_DIR` | `/var/www/html/sbp_mq_dev/logs` | `/var/www/html/sbp_mq/logs` |
@@ -485,7 +485,7 @@ PYTHONUNBUFFERED=1
 PYDEVD_USE_FRAME_EVAL=NO
 ```
 
-Для PROD — заменить значения на продовые (`8511`, `false`, `/sbp/mq`, `0`,
+Для PROD — заменить значения на продовые (`8510`, `false`, `/sbp/mq`, `0`,
 `sbp_mq_queue`, `sbp`).
 
 ---

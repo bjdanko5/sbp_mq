@@ -79,7 +79,7 @@ source "$PROJECT_DIR/sh_common/load_env.sh" "$PROJECT_DIR" || exit 1
 
 ```bash
 source load_env.sh "$DEV_DIR"      # чтобы узнать $PROD_DIR
-source load_env.sh "$PROD_DIR"     # чтобы узнать $SBP_MQ_PORT (8511)
+source load_env.sh "$PROD_DIR"     # чтобы узнать $SBP_MQ_PORT (8510)
 ```
 
 Потому что `DEV_DIR` / `PROD_DIR` заданы **в обоих** `.env`, а `SBP_MQ_PORT`
@@ -95,7 +95,7 @@ source load_env.sh "$PROD_DIR"     # чтобы узнать $SBP_MQ_PORT (8511)
 ### Что ждёт
 
 1. `systemctl is-active sbp_mq-debug.service` → `active`
-2. HTTP на `http://localhost:8511/health` → `200`
+2. HTTP на `http://localhost:8510/health` → `200`
 
 ### Параметры (в шапке)
 

@@ -11,7 +11,7 @@
 | Способ | Ссылка |
 |--------|--------|
 | **В браузере (DEV)** | `http://localhost:8512/project-docs` |
-| **В браузере (PROD)** | `http://localhost:8511/project-docs` |
+| **В браузере (PROD)** | `http://localhost:8510/project-docs` |
 | **Swagger (API)** | `http://localhost:8512/docs` |
 | **В репозитории** | файлы `docs/*.md` — **единый источник** |
 | **На GitHub** | Mermaid-диаграммы рендерятся автоматически |
@@ -111,7 +111,7 @@
 |-----|-----|
 | **Репозиторий** | `git@github.com:bjdanko5/sbp_mq.git` |
 | **DEV** | `http://localhost:8512` (ветка `dev`) |
-| **PROD** | `http://localhost:8511` (ветка `main`) |
+| **PROD** | `http://localhost:8510` (ветка `main`) |
 | **Swagger DEV** | `http://localhost:8512/docs` |
 | **Документация DEV** | `http://localhost:8512/project-docs` |
 | **Мониторинг DEV** | `http://localhost:8512/monitor` |

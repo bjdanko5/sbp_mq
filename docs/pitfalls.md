@@ -284,6 +284,29 @@ git config --global core.pager 'less -FRX'
 
 ## journalctl -u service.service не видит @N-инстансы
 
+**Симптом:** `test_smoke.sh[2]` иногда падает с «SOAP Notify не вызвался»,
+хотя в `journalctl` запись есть. Тест flaky — то зелёный, то красный.
+
+**Причина:** три worker-сервиса — `sbp_mq-dev-worker.service`,
+`sbp_mq-dev-worker@1.service`, `sbp_mq-dev-worker@2.service`.
+Job берёт **случайный** воркер. Тест искал только в основном
+`.service` — записи от `@1`/`@2` не находились.
+
+**Как не наступить:**
+
+- Искать во **всех** воркерах через glob:
+
+    sudo journalctl -u 'sbp_mq-dev-worker*' --since "60 sec ago" --no-pager
+
+- `-u` в `journalctl` поддерживает glob-паттерны для unit'ов.
+- Аналогично в PROD: `-u 'sbp_mq-worker*'`.
+- Для подсчёта дублей **не использовать** journalctl — считать
+  по файлам результата (`success/` + `error/`) и `processing/`.
+
+**Дата:** 2026-09-28
+
+---
+
 ## Шаблон для новой записи
 
     ## Краткое название грабли

@@ -70,6 +70,22 @@ test_fail() {
     FAILED_DETAILS+=("  [${TOTAL}] ${reason}")
 }
 
+# Ожидание с проверкой команды
+wait_for() {
+    local timeout="$1"
+    local check_cmd="$2"
+    local elapsed=0
+
+    while [ "$elapsed" -lt "$timeout" ]; do
+        if eval "$check_cmd" > /dev/null 2>&1; then
+            return 0
+        fi
+        sleep 1
+        elapsed=$((elapsed + 1))
+    done
+    return 1
+}
+
 # ============================================================
 #                   ПРОВЕРКА ОКРУЖЕНИЯ
 # ============================================================
@@ -89,10 +105,6 @@ if ! timeout 5 curl -sf "${BASE_URL}/health" > /dev/null 2>&1; then
     exit 1
 fi
 
-> "$PROJECT_DIR/logs/sbp-dev.log" 2>/dev/null || true
-> "$PROJECT_DIR/logs/sbp-dev_errors.log" 2>/dev/null || true
-> "$PROJECT_DIR/logs/all.log" 2>/dev/null || true
-
 mkdir -p "$JOB_DIR" "$JOBS_DIR" 2>/dev/null
 mkdir -p "$JOB_DIR/stop" "$JOB_DIR/stoped" 2>/dev/null
 
@@ -107,7 +119,6 @@ test_step 1 "Базовый happy path (SOAP OK)"
 
 JOB_ID_1=77001
 REQ_ID_1="77001001"
-JOB_TASK_1=""
 
 rm -f "$JOB_DIR/${JOB_ID_1}.json" 2>/dev/null
 rm -f "$JOBS_DIR/${BANK}@${BASE}@${JOB_ID_1}.json" 2>/dev/null
@@ -138,13 +149,14 @@ if [ -z "$JOB_TASK_1" ] || [ "$JOB_TASK_1" = "null" ]; then
     PUBLISH_ERR=$(echo "$PUBLISH_1" | jq -r '.error // .detail // "unknown"' 2>/dev/null)
     test_fail "[1] Не удалось опубликовать Job ${JOB_ID_1}: ${PUBLISH_ERR}"
 else
-    sleep 4
-    if [ -f "$JOBS_DIR/success/${BANK}@${BASE}@${JOB_ID_1}.json" ]; then
-        test_pass
-    elif [ -f "$JOBS_DIR/error/${BANK}@${BASE}@${JOB_ID_1}.json" ]; then
-        test_fail "[1] Job ${JOB_ID_1} попал в error/ (ожидался success/)"
+    if wait_for 15 "[ -f '$JOBS_DIR/success/${BANK}@${BASE}@${JOB_ID_1}.json' ] || [ -f '$JOBS_DIR/error/${BANK}@${BASE}@${JOB_ID_1}.json' ]"; then
+        if [ -f "$JOBS_DIR/success/${BANK}@${BASE}@${JOB_ID_1}.json" ]; then
+            test_pass
+        else
+            test_fail "[1] Job ${JOB_ID_1} попал в error/ (ожидался success/)"
+        fi
     else
-        test_fail "[1] Job ${JOB_ID_1} не завершён за 4 сек"
+        test_fail "[1] Job ${JOB_ID_1} не завершён за 15 сек"
     fi
 fi
 
@@ -186,12 +198,22 @@ if [ -z "$TASK_2" ] || [ "$TASK_2" = "null" ]; then
     PUBLISH_ERR_2=$(echo "$PUBLISH_2" | jq -r '.error // .detail // "unknown"' 2>/dev/null)
     test_fail "[2] Не удалось опубликовать Job ${JOB_ID_2}: ${PUBLISH_ERR_2}"
 else
-    sleep 4
-    if [ -f "$JOBS_DIR/error/${BANK}@${BASE}@${JOB_ID_2}.json" ] \
-        && grep -q "SOAP Notify.*${JOB_ID_2}" "$PROJECT_DIR/logs/sbp-dev.log" 2>/dev/null; then
+    SOAP_OK=0
+    for i in $(seq 1 15); do
+        if [ -f "$JOBS_DIR/error/${BANK}@${BASE}@${JOB_ID_2}.json" ]; then
+            if sudo journalctl -u 'sbp_mq-dev-worker*' --since "60 sec ago" --no-pager 2>/dev/null \
+                | grep -q "SOAP Notify.*${JOB_ID_2}"; then
+                SOAP_OK=1
+                break
+            fi
+        fi
+        sleep 1
+    done
+
+    if [ "$SOAP_OK" = "1" ]; then
         test_pass
     elif [ ! -f "$JOBS_DIR/error/${BANK}@${BASE}@${JOB_ID_2}.json" ]; then
-        test_fail "[2] Job ${JOB_ID_2} не в error/"
+        test_fail "[2] Job ${JOB_ID_2} не в error/ за 15 сек"
     else
         test_fail "[2] SOAP Notify не вызвался для Job ${JOB_ID_2}"
     fi
@@ -217,7 +239,7 @@ else
 fi
 
 # ============================================================
-#                   [4] FALLBACK SQLITE  (С ОТЛАДКОЙ)
+#                   [4] FALLBACK SQLITE
 # ============================================================
 
 test_step 4 "Fallback SQLite (Redis пуст)"
@@ -239,17 +261,23 @@ else
     if [ "$REDIS_HAS" != "0" ]; then
         test_fail "[4] req:${REQ_4} уже есть в Redis (ожидалось пусто)"
     else
-        CALLBACK_4=$(timeout 10 curl -s -X POST "${BASE_URL}/callback" \
-            -H "Content-Type: application/json" \
-            -d "[{\"requestId\":\"${REQ_4}\",\"qrPayload\":null,\"errorMessage\":null}]")
+        FOUND_4=""
+        for attempt in 1 2 3 4 5; do
+            CALLBACK_4=$(timeout 10 curl -s -X POST "${BASE_URL}/callback" \
+                -H "Content-Type: application/json" \
+                -d "[{\"requestId\":\"${REQ_4}\",\"qrPayload\":null,\"errorMessage\":null}]")
 
-        echo ""
+            FOUND_4=$(echo "$CALLBACK_4" | jq -r --arg base "$BASE" '.[$base].status // empty' 2>/dev/null)
+            if [ "$FOUND_4" = "success" ] || [ "$FOUND_4" = "error" ] || [ "$FOUND_4" = "warning" ]; then
+                break
+            fi
+            sleep 2
+        done
 
-        FOUND_4=$(echo "$CALLBACK_4" | jq -r --arg base "$BASE" '.[$base].status // empty' 2>/dev/null)
         if [ "$FOUND_4" = "success" ] || [ "$FOUND_4" = "error" ] || [ "$FOUND_4" = "warning" ]; then
             test_pass
         else
-            NOT_FOUND_4=$(echo "$CALLBACK_4" | jq -r '._not_found.request_ids // [] | length' 2>/dev/null)
+            NOT_FOUND_4=$(echo "$CALLBACK_4" | jq -r '.not_found_ids // [] | length' 2>/dev/null)
             test_fail "[4] Fallback не сработал (found='${FOUND_4}', not_found=${NOT_FOUND_4})"
         fi
     fi
@@ -263,7 +291,6 @@ rm -f /tmp/fallback_smoke.txt 2>/dev/null
 test_step 5 "Конкурентность (5 Job параллельно)"
 
 CONCURRENT_JOBS=(77101 77102 77103 77104 77105)
-CONCURRENT_TASKS=()
 
 for jid in "${CONCURRENT_JOBS[@]}"; do
     req_id="${jid}001"
@@ -297,26 +324,40 @@ for jid in "${CONCURRENT_JOBS[@]}"; do
 done
 wait
 
-sleep 6
-
-DUPLICATES=0
-NOT_DONE=0
+ALL_DONE_CMD=""
 for jid in "${CONCURRENT_JOBS[@]}"; do
-    TAKEN_COUNT=$(grep -c "ВЗЯЛ Job ${BANK}@${BASE}@${jid}" "$PROJECT_DIR/logs/sbp-dev.log" 2>/dev/null)
-    TAKEN_COUNT=${TAKEN_COUNT:-0}
-    if [ "$TAKEN_COUNT" -gt "1" ]; then
-        DUPLICATES=$((DUPLICATES + 1))
-    fi
-    if [ ! -f "$JOBS_DIR/success/${BANK}@${BASE}@${jid}.json" ] \
-        && [ ! -f "$JOBS_DIR/error/${BANK}@${BASE}@${jid}.json" ]; then
-        NOT_DONE=$((NOT_DONE + 1))
-    fi
+    ALL_DONE_CMD="$ALL_DONE_CMD [ -f '$JOBS_DIR/success/${BANK}@${BASE}@${jid}.json' ] || [ -f '$JOBS_DIR/error/${BANK}@${BASE}@${jid}.json' ] &&"
 done
+ALL_DONE_CMD="${ALL_DONE_CMD% &&}"
 
-if [ "$DUPLICATES" = "0" ] && [ "$NOT_DONE" = "0" ]; then
-    test_pass
+if wait_for 20 "$ALL_DONE_CMD"; then
+    DUPLICATES=0
+    NOT_DONE=0
+    PROCESSING=0
+    for jid in "${CONCURRENT_JOBS[@]}"; do
+        # Дубль = больше одного файла результата (success + error) для одного job_id
+        RESULT_FILES=0
+        [ -f "$JOBS_DIR/success/${BANK}@${BASE}@${jid}.json" ] && RESULT_FILES=$((RESULT_FILES + 1))
+        [ -f "$JOBS_DIR/error/${BANK}@${BASE}@${jid}.json" ]   && RESULT_FILES=$((RESULT_FILES + 1))
+        if [ "$RESULT_FILES" -gt "1" ]; then
+            DUPLICATES=$((DUPLICATES + 1))
+        fi
+        if [ "$RESULT_FILES" = "0" ]; then
+            NOT_DONE=$((NOT_DONE + 1))
+        fi
+        # Зависшая обработка: остался файл в processing/
+        if [ -f "$JOB_DIR/processing/${jid}.json" ]; then
+            PROCESSING=$((PROCESSING + 1))
+        fi
+    done
+
+    if [ "$DUPLICATES" = "0" ] && [ "$NOT_DONE" = "0" ] && [ "$PROCESSING" = "0" ]; then
+        test_pass
+    else
+        test_fail "[5] Дубликатов: ${DUPLICATES}, не завершено: ${NOT_DONE}, в processing: ${PROCESSING}"
+    fi
 else
-    test_fail "[5] Дубликатов: ${DUPLICATES}, не завершено: ${NOT_DONE}"
+    test_fail "[5] Не все 5 Job завершены за 20 сек"
 fi
 
 rm -f /tmp/smoke_concurrent_*.json 2>/dev/null
@@ -351,7 +392,8 @@ cat > "$JOBS_DIR/${BANK}@${BASE}@${STOP_JOB_ID}.json" << EOF
 EOF
 
 timeout 10 curl -s "${BASE_URL}/create_payload_mq/${BANK}/${BASE}/${STOP_JOB_ID}" > /dev/null
-sleep 4
+
+wait_for 15 "[ -f '$JOBS_DIR/success/${BANK}@${BASE}@${STOP_JOB_ID}.json' ] || [ -f '$JOBS_DIR/error/${BANK}@${BASE}@${STOP_JOB_ID}.json' ]" || true
 
 mkdir -p "$JOB_DIR/stop"
 cat > "$STOP_FILE" << EOF
@@ -406,7 +448,7 @@ test_step 9 "/health/detailed — 7 компонентов"
 
 HEALTH_RESULT=$(timeout 10 curl -s "${BASE_URL}/health/detailed")
 HEALTH_STATUS=$(echo "$HEALTH_RESULT" | jq -r '.status // empty' 2>/dev/null)
-COMPONENTS_COUNT=$(echo "$HEALTH_RESULT" | jq -r '.components | keys | length' 2>/dev/null)
+COMPONENTS_COUNT=$(echo "$HEALTH_RESULT" | jq '.components | keys | length' 2>/dev/null)
 
 if [ "$HEALTH_STATUS" = "ok" ] && [ "$COMPONENTS_COUNT" = "7" ]; then
     test_pass

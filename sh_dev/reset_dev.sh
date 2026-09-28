@@ -1,19 +1,24 @@
 #!/bin/bash
 # reset_dev.sh — очистка dev-данных
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+source "$PROJECT_DIR/sh_common/load_env.sh" "$PROJECT_DIR" || exit 1
+
 echo "⚠️  Будет очищено:"
-echo "   - Redis DB 1"
-echo "   - /sbp/mq_dev/jobs/"
-echo "   - /var/www/html/sbp_mq_dev/logs/"
+echo "   - Redis DB $REDIS_DB"
+echo "   - $SBP_ROOT4MQ/jobs/"
+echo "   - $LOG_DIR/"
 read -p "Продолжить? (y/n): " c
 if [ "$c" != "y" ]; then echo "❌ Отменено"; exit 0; fi
 
-redis-cli -n 1 FLUSHDB > /dev/null 2>&1
-echo "✅ Redis DB 1 очищен"
+redis-cli -n "$REDIS_DB" FLUSHDB > /dev/null 2>&1
+echo "✅ Redis DB $REDIS_DB очищен"
 
-rm -f /sbp/mq_dev/jobs/*.json /sbp/mq_dev/jobs/success/*.json /sbp/mq_dev/jobs/error/*.json 2>/dev/null
+rm -f "$SBP_ROOT4MQ/jobs/"*.json "$SBP_ROOT4MQ/jobs/success/"*.json "$SBP_ROOT4MQ/jobs/error/"*.json 2>/dev/null
 echo "✅ Jobs очищены"
 
-for f in /var/www/html/sbp_mq_dev/logs/*.log; do
+for f in "$LOG_DIR"/*.log; do
     [ -f "$f" ] && : > "$f"
 done
 echo "✅ Логи очищены"

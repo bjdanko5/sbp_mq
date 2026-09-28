@@ -16,7 +16,7 @@
 #   - requestId — ЧИСЛА до 1000 (уникальные)
 #     Формула: BASE_IDX * 100 + JOB_IDX * 10 + REQ_IDX
 
-cd /var/www/html/sbp_mq_dev
+# Пути определяются через load_env.sh ниже
 
 # Загружаем .env
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -98,7 +98,7 @@ if ! command -v python3 > /dev/null 2>&1; then
 fi
 echo "   ✅ python3: OK"
 
-REQ_BEFORE=$(redis-cli -n 1 KEYS "req:*" | wc -l)
+REQ_BEFORE=$(redis-cli -n "$REDIS_DB" KEYS "req:*" | wc -l)
 echo "   📊 req:* до теста: $REQ_BEFORE"
 
 echo ""
@@ -134,15 +134,15 @@ echo ""
 
 echo "🧹 Полная очистка..."
 
-redis-cli -n 1 FLUSHDB > /dev/null 2>&1
+redis-cli -n "$REDIS_DB" FLUSHDB > /dev/null 2>&1
 
 for base in "${BASES[@]}"; do
-    sudo rm -rf /sbp/mq_dev/ci/$base
+    sudo rm -rf $SBP_ROOT4MQ/ci/$base
 done
-sudo mkdir -p /sbp/mq_dev/jobs/{success,error}
-sudo rm -f /sbp/mq_dev/jobs/*.json
-sudo rm -f /sbp/mq_dev/jobs/success/*.json
-sudo rm -f /sbp/mq_dev/jobs/error/*.json
+sudo mkdir -p $SBP_ROOT4MQ/jobs/{success,error}
+sudo rm -f $SBP_ROOT4MQ/jobs/*.json
+sudo rm -f $SBP_ROOT4MQ/jobs/success/*.json
+sudo rm -f $SBP_ROOT4MQ/jobs/error/*.json
 sudo chown -R user:user /sbp/mq
 
 # Чистим SQLite от старых тестовых записей (числа 100..999)
@@ -167,8 +167,8 @@ BASE_IDX=0
 for BASE in "${BASES[@]}"; do
     BASE_IDX=$((BASE_IDX + 1))
     
-    sudo mkdir -p /sbp/mq_dev/ci/$BASE
-    sudo chown -R user:user /sbp/mq_dev/ci
+    sudo mkdir -p $SBP_ROOT4MQ/ci/$BASE
+    sudo chown -R user:user $SBP_ROOT4MQ/ci
     
     JOB_IDX=0
     for JOB_BASE in "${JOBS[@]}"; do
@@ -180,7 +180,7 @@ for BASE in "${BASES[@]}"; do
         REQ_1=$(get_request_id $BASE_IDX $JOB_IDX 1)
         REQ_2=$(get_request_id $BASE_IDX $JOB_IDX 2)
         
-        cat > /sbp/mq_dev/ci/$BASE/$FILENAME << EOF
+        cat > $SBP_ROOT4MQ/ci/$BASE/$FILENAME << EOF
 [
   {"requestId": "${REQ_1}", "amount": 100},
   {"requestId": "${REQ_2}", "amount": 200}
@@ -212,7 +212,7 @@ for BASE in "${BASES[@]}"; do
         REQ_1=$(get_request_id $BASE_IDX $JOB_IDX 1)
         REQ_2=$(get_request_id $BASE_IDX $JOB_IDX 2)
         
-        cat > /sbp/mq_dev/jobs/ci@${BASE}@${JOB}.json << JOB_EOF
+        cat > $SBP_ROOT4MQ/jobs/ci@${BASE}@${JOB}.json << JOB_EOF
 {
   "bank": "ci",
   "base": "${BASE}",
@@ -291,7 +291,7 @@ echo ""
 echo "🔍 ПРОВЕРКА req:* В REDIS"
 echo "=========================="
 
-REQ_COUNT=$(redis-cli -n 1 KEYS "req:*" | wc -l)
+REQ_COUNT=$(redis-cli -n "$REDIS_DB" KEYS "req:*" | wc -l)
 echo "   📊 Найдено req:* ключей: $REQ_COUNT (ожидаем 18 — 9 Job × 2 requestID)"
 
 if [ "$REQ_COUNT" -eq 0 ]; then
@@ -301,8 +301,8 @@ if [ "$REQ_COUNT" -eq 0 ]; then
 fi
 
 echo "   📋 Примеры req:*:"
-redis-cli -n 1 KEYS "req:*" | head -5 | while read key; do
-    VALUE=$(redis-cli -n 1 GET "$key")
+redis-cli -n "$REDIS_DB" KEYS "req:*" | head -5 | while read key; do
+    VALUE=$(redis-cli -n "$REDIS_DB" GET "$key")
     echo "      $key → $VALUE"
 done
 echo ""
@@ -351,9 +351,9 @@ echo ""
 
 # Проверяем req:* на уникальные task_id
 echo "   🔍 Проверка req:* → task_id:"
-TASK_IDS=$(redis-cli -n 1 KEYS "req:*" | while read key; do redis-cli -n 1 GET "$key"; done | sort -u)
+TASK_IDS=$(redis-cli -n "$REDIS_DB" KEYS "req:*" | while read key; do redis-cli -n "$REDIS_DB" GET "$key"; done | sort -u)
 UNIQUE_COUNT=$(echo "$TASK_IDS" | grep -c . || echo 0)
-TOTAL_REQ=$(redis-cli -n 1 KEYS "req:*" | wc -l)
+TOTAL_REQ=$(redis-cli -n "$REDIS_DB" KEYS "req:*" | wc -l)
 
 echo "      Всего req:*:          $TOTAL_REQ"
 echo "      Уникальных task_id:   $UNIQUE_COUNT"
@@ -490,7 +490,7 @@ echo "================================="
 
 sleep 1
 
-REQ_AFTER=$(redis-cli -n 1 KEYS "req:*" | wc -l)
+REQ_AFTER=$(redis-cli -n "$REDIS_DB" KEYS "req:*" | wc -l)
 echo "   📊 req:* после callback: $REQ_AFTER"
 echo "   ℹ️  req:* удаляются ТОЛЬКО при успешном SOAP"
 
@@ -517,9 +517,9 @@ FALLBACK_ID="999"
 echo "   📝 Создаём запись только в SQLite: $FALLBACK_ID"
 
 # Убеждаемся, что в Redis нет
-REDIS_HAS=$(redis-cli -n 1 EXISTS "req:$FALLBACK_ID")
+REDIS_HAS=$(redis-cli -n "$REDIS_DB" EXISTS "req:$FALLBACK_ID")
 if [ "$REDIS_HAS" = "1" ]; then
-    redis-cli -n 1 DEL "req:$FALLBACK_ID" > /dev/null
+    redis-cli -n "$REDIS_DB" DEL "req:$FALLBACK_ID" > /dev/null
     echo "   🗑️  Удалён существующий req:$FALLBACK_ID"
 fi
 
@@ -547,7 +547,7 @@ print(row[0] if row else '')
 ")
 echo "   📊 SQLite: '$SQLITE_CHECK' (ожидаем 'zkh_ursv')"
 
-REDIS_HAS=$(redis-cli -n 1 EXISTS "req:$FALLBACK_ID")
+REDIS_HAS=$(redis-cli -n "$REDIS_DB" EXISTS "req:$FALLBACK_ID")
 echo "   📊 Redis req:$FALLBACK_ID: $REDIS_HAS (ожидаем 0)"
 
 FALLBACK_PAYLOAD="[{\"requestId\":\"$FALLBACK_ID\",\"qrPayload\":\"QR:fallback\"}]"
@@ -714,8 +714,8 @@ else
     echo "   Проверьте:"
     echo "   - Логи сервера:   tail -50 logs/sbp.log"
     echo "   - Логи ошибок:    tail -50 logs/sbp_errors.log"
-    echo "   - req:* в Redis:  redis-cli -n 1 KEYS 'req:*'"
-    echo "   - task:* в Redis: redis-cli -n 1 KEYS 'task:*'"
+    echo "   - req:* в Redis:  redis-cli -n "$REDIS_DB" KEYS 'req:*'"
+    echo "   - task:* в Redis: redis-cli -n "$REDIS_DB" KEYS 'task:*'"
     echo ""
     exit 1
 fi

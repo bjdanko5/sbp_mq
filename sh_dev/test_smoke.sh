@@ -31,7 +31,7 @@ BASE="zkh_ursv"
 SBP_ROOT="$SBP_ROOT4MQ"
 JOB_DIR="$SBP_ROOT/$BANK/$BASE"
 JOBS_DIR="$SBP_ROOT/jobs"
-REDIS_DB="${REDIS_DB:-1}"
+REDIS_DB="$REDIS_DB"
 
 # ============================================================
 #                   ХЕЛПЕРЫ

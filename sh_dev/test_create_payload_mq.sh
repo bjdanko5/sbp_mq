@@ -21,20 +21,20 @@ echo ""
 
 echo "📁 Подготовка тестовых файлов..."
 
-sudo mkdir -p /sbp/mq_dev/ci/zkh_ursv
-sudo chown -R user:user /sbp/mq_dev/ci
+sudo mkdir -p $SBP_ROOT4MQ/ci/zkh_ursv
+sudo chown -R user:user $SBP_ROOT4MQ/ci
 
-cat > /sbp/mq_dev/ci/zkh_ursv/7845.json << 'JSON_EOF'
+cat > $SBP_ROOT4MQ/ci/zkh_ursv/7845.json << 'JSON_EOF'
 [
   {"requestId": "754316", "amount": 100},
   {"requestId": "754318", "amount": 200}
 ]
 JSON_EOF
 
-rm -f /sbp/mq_dev/jobs/error/ci@zkh_ursv@999.json
-rm -f /sbp/mq_dev/jobs/ci@zkh_ursv@999.json
+rm -f $SBP_ROOT4MQ/jobs/error/ci@zkh_ursv@999.json
+rm -f $SBP_ROOT4MQ/jobs/ci@zkh_ursv@999.json
 
-cat > /sbp/mq_dev/jobs/ci@zkh_ursv@999.json << 'JOB_EOF'
+cat > $SBP_ROOT4MQ/jobs/ci@zkh_ursv@999.json << 'JOB_EOF'
 {
   "bank": "ci",
   "base": "zkh_ursv",
@@ -53,7 +53,7 @@ cat > /sbp/mq_dev/jobs/ci@zkh_ursv@999.json << 'JOB_EOF'
 }
 JOB_EOF
 
-redis-cli -n 1 DEL "lock:job:ci:zkh_ursv:999" > /dev/null 2>&1
+redis-cli -n "$REDIS_DB" DEL "lock:job:ci:zkh_ursv:999" > /dev/null 2>&1
 
 echo "   ✅ Тестовые файлы созданы"
 echo ""

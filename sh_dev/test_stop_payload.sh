@@ -141,7 +141,7 @@ timeout 10 curl -s "$BASE_URL/create_payload_mq/$BANK/$BASE/$JOB_ID_LEGACY" > /d
 sleep 5
 
 # Проверяем req:*
-redis_count=$(redis-cli -n 1 keys "req:${REQ_LEGACY_1}*" | wc -l)
+redis_count=$(redis-cli -n "$REDIS_DB" keys "req:${REQ_LEGACY_1}*" | wc -l)
 assert_eq "$redis_count" "1" "req:$REQ_LEGACY_1 в Redis"
 
 # Создаём stop-файл

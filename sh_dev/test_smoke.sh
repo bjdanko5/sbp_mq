@@ -49,7 +49,6 @@ FAIL=0
 TOTAL=0
 START_TIME=$(date +%s)
 
-# Массив для деталей упавших
 declare -a FAILED_DETAILS=()
 
 test_step() {
@@ -85,18 +84,15 @@ echo -e "${GRAY}   Base:   ${BASE}${NC}"
 echo -e "${GRAY}   Redis:  DB ${REDIS_DB}${NC}"
 echo ""
 
-# Проверка API
 if ! timeout 5 curl -sf "${BASE_URL}/health" > /dev/null 2>&1; then
     echo -e "${RED}❌ API не отвечает на ${BASE_URL}/health${NC}"
     exit 1
 fi
 
-# Очистка логов
 > "$PROJECT_DIR/logs/sbp-dev.log" 2>/dev/null || true
 > "$PROJECT_DIR/logs/sbp-dev_errors.log" 2>/dev/null || true
 > "$PROJECT_DIR/logs/all.log" 2>/dev/null || true
 
-# Создание директорий
 mkdir -p "$JOB_DIR" "$JOBS_DIR" 2>/dev/null
 mkdir -p "$JOB_DIR/stop" "$JOB_DIR/stoped" 2>/dev/null
 
@@ -113,23 +109,19 @@ JOB_ID_1=77001
 REQ_ID_1="77001001"
 JOB_TASK_1=""
 
-# Очистка
 rm -f "$JOB_DIR/${JOB_ID_1}.json" 2>/dev/null
 rm -f "$JOBS_DIR/${BANK}@${BASE}@${JOB_ID_1}.json" 2>/dev/null
 rm -f "$JOBS_DIR/error/${BANK}@${BASE}@${JOB_ID_1}.json" 2>/dev/null
 rm -f "$JOBS_DIR/success/${BANK}@${BASE}@${JOB_ID_1}.json" 2>/dev/null
 rm -f "$JOB_DIR/processing/${JOB_ID_1}.json" 2>/dev/null
 rm -f "$JOB_DIR/sended/${JOB_ID_1}.json" 2>/dev/null
-# Redis — очистка следов Job (lock, task, req)
 redis-cli -n "$REDIS_DB" --scan --pattern "*${JOB_ID_1}*" 2>/dev/null | xargs -r redis-cli -n "$REDIS_DB" del > /dev/null 2>&1 || true
 redis-cli -n "$REDIS_DB" --scan --pattern "lock:*${JOB_ID_1}*" 2>/dev/null | xargs -r redis-cli -n "$REDIS_DB" del > /dev/null 2>&1 || true
 
-# Файл с запросом (валидный)
 cat > "$JOB_DIR/${JOB_ID_1}.json" << EOF
 [{"requestId":"${REQ_ID_1}","amount":100}]
 EOF
 
-# Job
 cat > "$JOBS_DIR/${BANK}@${BASE}@${JOB_ID_1}.json" << EOF
 {
   "bank": "${BANK}", "base": "${BASE}", "job_id": ${JOB_ID_1},
@@ -139,7 +131,6 @@ cat > "$JOBS_DIR/${BANK}@${BASE}@${JOB_ID_1}.json" << EOF
 }
 EOF
 
-# Публикация
 PUBLISH_1=$(timeout 10 curl -s "${BASE_URL}/create_payload_mq/${BANK}/${BASE}/${JOB_ID_1}")
 JOB_TASK_1=$(echo "$PUBLISH_1" | jq -r '.data.task_id // empty' 2>/dev/null)
 
@@ -148,7 +139,6 @@ if [ -z "$JOB_TASK_1" ] || [ "$JOB_TASK_1" = "null" ]; then
     test_fail "[1] Не удалось опубликовать Job ${JOB_ID_1}: ${PUBLISH_ERR}"
 else
     sleep 4
-    # Проверка: Job в success/ (не error/)
     if [ -f "$JOBS_DIR/success/${BANK}@${BASE}@${JOB_ID_1}.json" ]; then
         test_pass
     elif [ -f "$JOBS_DIR/error/${BANK}@${BASE}@${JOB_ID_1}.json" ]; then
@@ -176,7 +166,6 @@ rm -f "$JOB_DIR/sended/${JOB_ID_2}.json" 2>/dev/null
 redis-cli -n "$REDIS_DB" --scan --pattern "*${JOB_ID_2}*" 2>/dev/null | xargs -r redis-cli -n "$REDIS_DB" del > /dev/null 2>&1 || true
 redis-cli -n "$REDIS_DB" --scan --pattern "lock:*${JOB_ID_2}*" 2>/dev/null | xargs -r redis-cli -n "$REDIS_DB" del > /dev/null 2>&1 || true
 
-# Файл с ошибкой (amount<0 → mockapi 400)
 cat > "$JOB_DIR/${JOB_ID_2}.json" << EOF
 [{"requestId":"${REQ_ID_2}","amount":-100}]
 EOF
@@ -198,7 +187,6 @@ if [ -z "$TASK_2" ] || [ "$TASK_2" = "null" ]; then
     test_fail "[2] Не удалось опубликовать Job ${JOB_ID_2}: ${PUBLISH_ERR_2}"
 else
     sleep 4
-    # Проверка: Job в error/ + SOAP Notify в логах
     if [ -f "$JOBS_DIR/error/${BANK}@${BASE}@${JOB_ID_2}.json" ] \
         && grep -q "SOAP Notify.*${JOB_ID_2}" "$PROJECT_DIR/logs/sbp-dev.log" 2>/dev/null; then
         test_pass
@@ -229,16 +217,13 @@ else
 fi
 
 # ============================================================
-#                   [4] FALLBACK SQLITE
+#                   [4] FALLBACK SQLITE  (С ОТЛАДКОЙ)
 # ============================================================
 
 test_step 4 "Fallback SQLite (Redis пуст)"
 
-# Создаём запись в SQLite напрямую (без Redis)
-# ⚠️ requestId должен быть числом (требование 1С)
 REQ_4="77999001"
 
-# Через Python — запись в SQLite
 python3 -c "
 from modules import db
 ok, err = db.save_to_db('${REQ_4}', '${BASE}')
@@ -250,15 +235,15 @@ SQLITE_SAVE=$(cat /tmp/fallback_smoke.txt 2>/dev/null | tail -1)
 if [ "$SQLITE_SAVE" != "OK" ]; then
     test_fail "[4] Не удалось сохранить в SQLite: ${SQLITE_SAVE}"
 else
-    # Проверяем, что в Redis нет
     REDIS_HAS=$(redis-cli -n "$REDIS_DB" exists "req:${REQ_4}" 2>/dev/null)
     if [ "$REDIS_HAS" != "0" ]; then
         test_fail "[4] req:${REQ_4} уже есть в Redis (ожидалось пусто)"
     else
-        # Callback — должен найти base через SQLite
         CALLBACK_4=$(timeout 10 curl -s -X POST "${BASE_URL}/callback" \
             -H "Content-Type: application/json" \
             -d "[{\"requestId\":\"${REQ_4}\",\"qrPayload\":null,\"errorMessage\":null}]")
+
+        echo ""
 
         FOUND_4=$(echo "$CALLBACK_4" | jq -r --arg base "$BASE" '.[$base].status // empty' 2>/dev/null)
         if [ "$FOUND_4" = "success" ] || [ "$FOUND_4" = "error" ] || [ "$FOUND_4" = "warning" ]; then
@@ -280,19 +265,14 @@ test_step 5 "Конкурентность (5 Job параллельно)"
 CONCURRENT_JOBS=(77101 77102 77103 77104 77105)
 CONCURRENT_TASKS=()
 
-# Создать 5 Job
 for jid in "${CONCURRENT_JOBS[@]}"; do
     req_id="${jid}001"
-
-    # Очистка файлов
     rm -f "$JOB_DIR/${jid}.json" 2>/dev/null
     rm -f "$JOBS_DIR/${BANK}@${BASE}@${jid}.json" 2>/dev/null
     rm -f "$JOBS_DIR/error/${BANK}@${BASE}@${jid}.json" 2>/dev/null
     rm -f "$JOBS_DIR/success/${BANK}@${BASE}@${jid}.json" 2>/dev/null
     rm -f "$JOB_DIR/processing/${jid}.json" 2>/dev/null
     rm -f "$JOB_DIR/sended/${jid}.json" 2>/dev/null
-
-    # Очистка Redis (lock, req, task) — иначе JOB_ALREADY_PROCESSING
     redis-cli -n "$REDIS_DB" --scan --pattern "*${jid}*" 2>/dev/null \
         | xargs -r redis-cli -n "$REDIS_DB" del > /dev/null 2>&1 || true
     redis-cli -n "$REDIS_DB" --scan --pattern "*${req_id}*" 2>/dev/null \
@@ -312,7 +292,6 @@ EOF
 EOF
 done
 
-# Публикация всех 5 параллельно
 for jid in "${CONCURRENT_JOBS[@]}"; do
     (timeout 10 curl -s "${BASE_URL}/create_payload_mq/${BANK}/${BASE}/${jid}" > /tmp/smoke_concurrent_${jid}.json) &
 done
@@ -320,17 +299,14 @@ wait
 
 sleep 6
 
-# Проверка: все 5 обработаны, каждый взят 1 раз
 DUPLICATES=0
 NOT_DONE=0
 for jid in "${CONCURRENT_JOBS[@]}"; do
-    # Проверка "взят 1 раз" — через grep в логах
     TAKEN_COUNT=$(grep -c "ВЗЯЛ Job ${BANK}@${BASE}@${jid}" "$PROJECT_DIR/logs/sbp-dev.log" 2>/dev/null)
     TAKEN_COUNT=${TAKEN_COUNT:-0}
     if [ "$TAKEN_COUNT" -gt "1" ]; then
         DUPLICATES=$((DUPLICATES + 1))
     fi
-    # Проверка завершения
     if [ ! -f "$JOBS_DIR/success/${BANK}@${BASE}@${jid}.json" ] \
         && [ ! -f "$JOBS_DIR/error/${BANK}@${BASE}@${jid}.json" ]; then
         NOT_DONE=$((NOT_DONE + 1))
@@ -343,7 +319,6 @@ else
     test_fail "[5] Дубликатов: ${DUPLICATES}, не завершено: ${NOT_DONE}"
 fi
 
-# Очистка временных файлов
 rm -f /tmp/smoke_concurrent_*.json 2>/dev/null
 
 # ============================================================
@@ -362,7 +337,6 @@ rm -f "$JOBS_DIR/${BANK}@${BASE}@${STOP_JOB_ID}.json" 2>/dev/null
 rm -f "$JOBS_DIR/error/${BANK}@${BASE}@${STOP_JOB_ID}.json" 2>/dev/null
 rm -f "$JOBS_DIR/success/${BANK}@${BASE}@${STOP_JOB_ID}.json" 2>/dev/null
 
-# Создаём Job + req:*
 cat > "$JOB_DIR/${STOP_JOB_ID}.json" << EOF
 [{"requestId":"${STOP_REQ_ID}","amount":100}]
 EOF
@@ -379,13 +353,11 @@ EOF
 timeout 10 curl -s "${BASE_URL}/create_payload_mq/${BANK}/${BASE}/${STOP_JOB_ID}" > /dev/null
 sleep 4
 
-# Создаём stop-файл
 mkdir -p "$JOB_DIR/stop"
 cat > "$STOP_FILE" << EOF
 [{"requestId":"${STOP_REQ_ID}"}]
 EOF
 
-# Вызываем stop_payload
 STOP_RESULT=$(timeout 10 curl -s "${BASE_URL}/stop_payload/${BANK}/${BASE}/${STOP_JOB_ID}")
 STOP_STATUS=$(echo "$STOP_RESULT" | jq -r '.status // empty' 2>/dev/null)
 STOP_BLOCKED=$(echo "$STOP_RESULT" | jq -r '.data.blocked // 0' 2>/dev/null)

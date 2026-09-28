@@ -2,6 +2,9 @@
 # sbp_mq_service_start.sh
 # Запуск/перезапуск sbp_mq-debug.service с ожиданием полного старта.
 #
+# ⚠️ Скрипт ТОЛЬКО для PROD (sbp_mq-debug.service).
+#    Для DEV — использовать sh_dev/restart_dev.sh.
+#
 # Ждёт:
 #   1. Сервис перейдёт в active (running)
 #   2. HTTP-сервер ответит на порту из .env
@@ -13,8 +16,27 @@
 
 set -o pipefail
 
-PROJECT_DIR="/var/www/html/sbp_mq"
+# ============================================================
+# ОПРЕДЕЛЕНИЕ ПУТЕЙ (без хардкода)
+# ============================================================
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+DEV_DIR="$(dirname "$SCRIPT_DIR")"        # sh_common → sbp_mq_dev
+
+# ============================================================
+# ЗАГРУЗКА DEV .env (для PROD_DIR)
+# ============================================================
+
+source "$DEV_DIR/sh_common/load_env.sh" "$DEV_DIR" || exit 1
+
+# ============================================================
+# ЗАГРУЗКА PROD .env (для SBP_MQ_PORT)
+# ============================================================
+
+PROJECT_DIR="$PROD_DIR"
 SERVICE_NAME="sbp_mq-debug.service"
+
+source "$DEV_DIR/sh_common/load_env.sh" "$PROD_DIR" || exit 1
 
 # Таймауты (секунды)
 START_TIMEOUT=60        # ожидание active (running)
@@ -53,21 +75,10 @@ else
 fi
 
 # ============================================================
-# ЗАГРУЗКА .env (для SBP_MQ_PORT)
+# ИНФОРМАЦИЯ
 # ============================================================
 
-if [ -f ".env" ]; then
-    # shellcheck disable=SC1091
-    set -a
-    source .env
-    set +a
-    echo -e "${GREEN}✅ .env загружен${NC}"
-else
-    echo -e "${YELLOW}⚠️  .env не найден${NC}"
-fi
-
-# Порт обязателен (задаётся в .env)
-SBP_MQ_PORT="${SBP_MQ_PORT:?SBP_MQ_PORT не задан. Проверь .env или окружение}"
+echo -e "${GREEN}✅ .env загружен (SBP_MQ_PORT=$SBP_MQ_PORT)${NC}"
 
 # ============================================================
 # ФУНКЦИИ

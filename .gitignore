@@ -104,3 +104,5 @@ PROJECT EXPORT REPORT.txt
 project_export.txt
 project_context.txt
 settings.json
+*.bak.*
+*.bak

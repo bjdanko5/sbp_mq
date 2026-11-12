@@ -13,7 +13,7 @@ from modules.logger_config import logger
 from modules import db
 from modules.api_bank_client import create_bank_client
 from modules.request_storage import request_storage
-
+from modules.api_bank_client.bank_sb import FatalBankError
 
 class FileProcessor:
     """Обработчик файлов."""
@@ -153,6 +153,16 @@ class FileProcessor:
                         'error': 'Пустой ответ от API'
                     }
                 logger.debug(f"[Worker {worker_id}] API ответ {response.status_code}")
+            except FatalBankError as e:
+                # 🚨 ПЕРЕХВАТ ФАТАЛЬНОЙ ОШИБКИ (3 ретрая провалились)
+                logger.error(f"[Worker {worker_id}] ❌ Фатальная ошибка банка, прерываем Job: {e}")
+            
+                # Возвращаем ошибку, чтобы родительский процесс (consumer) прервал Job
+                return {
+                    'status': 'error',
+                    'filename': file_path.name,
+                    'error': f'Банк недоступен после 3 попыток: {e}'
+                }    
             except Exception as e:
                 return {
                     'status': 'error',

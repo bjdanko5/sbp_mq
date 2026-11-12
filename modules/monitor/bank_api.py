@@ -32,8 +32,8 @@ HEALTHCHECK_TIMEOUT = 5.0
 
 BACKOFF_MAP = {
     0: 60,
-    3: 600,
-    5: 1800,
+    3: 60,
+    5: 60,
 }
 
 
@@ -154,7 +154,7 @@ async def check_all_banks() -> dict:
         
         # Пропускаем заглушки (с "..." в URL)
         if "..." in url:
-            logger.debug(f"[BankAPI] Пропуск {bank}: URL-заглушка")
+            #logger.debug(f"[BankAPI] Пропуск {bank}: URL-заглушка")
             continue
         
         host, port = _parse_target(url)
@@ -225,10 +225,10 @@ class BankApiHealthState:
         else:
             self.consecutive_errors += 1
         
-        logger.debug(
-            f"[BankAPI] TCP errors={self.consecutive_errors}, "
-            f"next_interval={self._get_base_interval()}s"
-        )
+        #logger.debug(
+        #    f"[BankAPI] TCP errors={self.consecutive_errors}, "
+        #    f"next_interval={self._get_base_interval()}s"
+        #)
     
     def get_status(self) -> dict:
         """Текущее состояние (для /health)."""

@@ -10,7 +10,8 @@
    
 2. GET /stop_payload/{bank}/{base}/{job_id}
    Новый (мультибанк, mq-технология).
-   Обрабатывает ОДИН файл stop/{job_id}.json через stop_processor.
+   Ищет {bank}@{base}@{job_id}.json во всех подпапках jobs/,
+   перемещает в stop/{job_id}.json и обрабатывает через stop_processor.
    Использует create_bank_client(bank).send_request_patch().
 """
 
@@ -259,6 +260,44 @@ async def stop_payload_legacy(base: str):
 #         NEW: GET /stop_payload/{bank}/{base}/{job_id} (мультибанк)
 # ============================================================
 
+def _find_job_file_in_jobs(base_path: Path, bank: str, base: str, job_id: int) -> Path | None:
+    """
+    Ищет файл Job рекурсивно во всех подпапках base_path/jobs/.
+
+    Поддерживаемые имена:
+      - {bank}@{base}@{job_id}.json   ← основной формат (напр. ci@zkh_ursv@123.json)
+      - {job_id}.json                 ← legacy / fallback
+
+    Возвращает первый найденный путь или None.
+    """
+    jobs_dir = base_path / "jobs"
+    if not jobs_dir.exists():
+        return None
+
+    primary_name = f"{bank}@{base}@{job_id}.json"
+    legacy_name = f"{job_id}.json"
+    # суффикс — на случай base с @ внутри или нестандартного имени
+    suffix = f"@{job_id}.json"
+
+    # 1. Быстрый путь: типичное место активного Job — jobs/processing/
+    direct = jobs_dir / "processing" / primary_name
+    if direct.is_file():
+        return direct
+
+    # 2. Полный рекурсивный обход — сверяем имя
+    for candidate in jobs_dir.rglob("*.json"):
+        if not candidate.is_file():
+            continue
+        name = candidate.name
+        if name == primary_name or name == legacy_name:
+            return candidate
+        # на случай нестандартной вложенности/имени — по суффиксу
+        if name.endswith(suffix):
+            return candidate
+
+    return None
+
+
 @router.get("/stop_payload/{bank}/{base}/{job_id}")
 async def stop_payload_mq(bank: str, base: str, job_id: int):
     """
@@ -266,8 +305,11 @@ async def stop_payload_mq(bank: str, base: str, job_id: int):
 
     Логика:
     1. Валидация bank (должен быть в config.SBP_ROOT)
-    2. Поиск файла stop/{job_id}.json для {bank}/{base}
-    3. Если файла нет — проверка stoped/{job_id}.json → FILE_NOT_FOUND
+    2. Поиск {bank}@{base}@{job_id}.json во всех подпапках jobs/
+       (напр. jobs/processing/ci@zkh_ursv@123.json);
+       при нахождении — перемещение в stop/{job_id}.json
+    3. Если файла нет (ни в jobs/, ни в stop/) — проверка stoped/{job_id}.json
+       → FILE_NOT_FOUND
     4. process_stop_for_job(bank, base, job_id, stop_file, stoped_dir)
 
     URL: /stop_payload/{bank}/{base}/{job_id}
@@ -293,6 +335,40 @@ async def stop_payload_mq(bank: str, base: str, job_id: int):
         stoped_dir = base_path / "stoped"
         stop_file = stop_dir / f"{job_id}.json"
 
+        # 2a. Если в stop/ файла нет — ищем в jobs/** и переносим в stop/
+        if not stop_file.exists():
+            found = _find_job_file_in_jobs(base_path, bank, base, job_id)
+            if found is not None:
+                stop_dir.mkdir(parents=True, exist_ok=True)
+                try:
+                    found.replace(stop_file)  # атомарное перемещение в пределах ФС
+                except OSError as move_err:
+                    log_error_with_context(
+                        move_err,
+                        f"stop_payload-mq перемещение {found} → {stop_file}"
+                    )
+                    return create_response(
+                        status=config.STATUS["FILE_MOVE_TO_STOPED_ERROR"],
+                        bank=bank,
+                        base=base,
+                        error=f"Не удалось переместить {found.name} в stop/: {move_err}",
+                        data={
+                            "bank": bank,
+                            "base": base,
+                            "job_id": job_id,
+                            "source": str(found),
+                            "target": str(stop_file),
+                        }
+                    )
+
+                logger.info(
+                    f"[{stack}] Найден и перемещён {found} → {stop_file}"
+                )
+            else:
+                logger.debug(
+                    f"[{stack}] Job-файл не найден в jobs/ для {bank}/{base}/{job_id}"
+                )
+
         # 3. Если файла нет в stop/ — проверяем stoped/
         if not stop_file.exists():
             stoped_file = stoped_dir / f"{job_id}.json"
@@ -314,7 +390,7 @@ async def stop_payload_mq(bank: str, base: str, job_id: int):
                     }
                 )
             logger.error(
-                f"[{stack}] Файл не найден ни в stop/, ни в stoped/: {stop_file}"
+                f"[{stack}] Файл не найден ни в jobs/, ни в stop/, ни в stoped/: {stop_file}"
             )
             return create_response(
                 status=config.STATUS["FILE_NOT_FOUND"],

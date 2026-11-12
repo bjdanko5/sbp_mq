@@ -163,6 +163,42 @@ sequenceDiagram
     end
 ```
 
+### 2.1. Особенности отправки в Сбербанк (BankSB)
+
+```mermaid
+sequenceDiagram
+    participant W as worker
+    participant B as BankSB
+    participant S as Сбербанк
+    participant F as FileProcessor
+    participant SN as soap_notify
+
+    W->>F: process_file()
+    F->>B: send_request(data)
+    
+    loop по каждому requestId (пачками по 3)
+        B->>S: POST (попытка 1)
+        alt timeout/500
+            B->>S: POST (попытка 2)
+            alt timeout/500
+                B->>S: POST (попытка 3)
+            end
+        end
+    end
+
+    alt все 3 попытки провалились
+        B-->>F: raise FatalBankError
+        F-->>W: return status='error'
+        W->>SN: notify_job_error()
+        SN->>1С: SOAP ProcessPayload
+    else успех
+        B-->>F: return fake_response (202)
+        F->>W: return status='completed'
+    end
+```
+
+**Почему так:** Сбербанк не принимает пакеты и банит за частые запросы. Вместо того чтобы «вешать» воркер на 10 минут, `BankSB` делает 3 быстрые попытки. Если банк лежит, `FatalBankError` мгновенно прерывает Job, и 1С получает уведомление об ошибке. Это спасает очередь от забивания «мертвыми» задачами.
+
 ### 3. Callback от банка
 
 ```mermaid

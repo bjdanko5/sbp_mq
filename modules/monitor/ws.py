@@ -70,7 +70,7 @@ manager = ConnectionManager()
 
 async def monitor_poller(stop_event: asyncio.Event) -> None:
     """Фоновый poller: каждые 2 сек читает данные, шлёт broadcast при изменениях."""
-    logger.info("[WS] Poller запущен")
+    #logger.info("[WS] Poller запущен")
     last_hash: str = ""
     
     while not stop_event.is_set():
@@ -95,15 +95,16 @@ async def monitor_poller(stop_event: asyncio.Event) -> None:
                 await manager.broadcast(payload)
                 last_hash = current_hash
                 
-                if manager.count > 0:
-                    logger.debug(
-                        f"[WS] Broadcast: "
-                        f"{len(data.get('processing', []))} активных, "
-                        f"{len(data.get('completed', []))} завершённых, "
-                        f"клиентов: {manager.count}"
-                    )
+                #if manager.count > 0:
+                #    logger.debug(
+                #        f"[WS] Broadcast: "
+                #        f"{len(data.get('processing', []))} активных, "
+                #        f"{len(data.get('completed', []))} завершённых, "
+                #        f"клиентов: {manager.count}"
+                #    )
         except Exception as e:
-            logger.error(f"[WS] Poller ошибка: {e}", exc_info=True)
+            pass
+            #logger.error(f"[WS] Poller ошибка: {e}", exc_info=True)
         
         try:
             await asyncio.wait_for(stop_event.wait(), timeout=2.0)
@@ -111,7 +112,7 @@ async def monitor_poller(stop_event: asyncio.Event) -> None:
         except asyncio.TimeoutError:
             pass
     
-    logger.info("[WS] Poller остановлен")
+    #logger.info("[WS] Poller остановлен")
 
 # ============================================================
 #                   BANK API POLLER (TCP)
@@ -146,7 +147,7 @@ async def bank_api_poller(stop_event: asyncio.Event) -> None:
     """TCP-проверка банков с backoff."""
     global bank_api_last
     
-    logger.info("[BankAPI] Poller запущен")
+    #logger.info("[BankAPI] Poller запущен")
     
     # Стартовый jitter
     initial_delay = random.uniform(5, 30)
@@ -170,12 +171,13 @@ async def bank_api_poller(stop_event: asyncio.Event) -> None:
                     "timestamp": datetime.now().isoformat(),
                     "bank_api": result,
                 })
-                logger.info(f"[BankAPI] Broadcast: {list(result.keys())}")
+                #logger.info(f"[BankAPI] Broadcast: {list(result.keys())}")
         except Exception as e:
-            logger.error(f"[BankAPI] Ошибка: {e}", exc_info=True)
+            pass
+            #logger.error(f"[BankAPI] Ошибка: {e}", exc_info=True)
         
         interval = bank_api_state.get_next_interval()
-        logger.debug(f"[BankAPI] Next check через {interval}s")
+        #logger.debug(f"[BankAPI] Next check через {interval}s")
         
         try:
             await asyncio.wait_for(stop_event.wait(), timeout=interval)
@@ -183,5 +185,5 @@ async def bank_api_poller(stop_event: asyncio.Event) -> None:
         except asyncio.TimeoutError:
             pass
     
-    logger.info("[BankAPI] Poller остановлен")
+    #logger.info("[BankAPI] Poller остановлен")
 
